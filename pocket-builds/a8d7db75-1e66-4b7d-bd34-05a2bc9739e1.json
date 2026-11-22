@@ -1,0 +1,8 @@
+{
+  "format": "xcode-pocket-project",
+  "version": 2,
+  "files": {
+    "PocketApp.swift": "import SwiftUI\n\n@main\nstruct PocketApp: App {\n    var body: some Scene {\n        WindowGroup {\n            ContentView()\n        }\n    }\n}\n",
+    "ContentView.swift": "import SwiftUI\n\nstruct ContentView: View {\n    @AppStorage(\"reaCounter\") private var count = 0\n\n    var body: some View {\n        VStack(spacing: 20) {\n            Text(\"REA B01\")\n                .font(.largeTitle.bold())\n                .accessibilityAddTraits(.isHeader)\n\n            Text(\"Počítadlo: \\(count)\")\n                .font(.title2)\n                .monospacedDigit()\n\n            Button(\"Přidat 1\") {\n                count += 1\n            }\n            .buttonStyle(.borderedProminent)\n        }\n        .padding()\n    }\n}\n"
+  }
+}

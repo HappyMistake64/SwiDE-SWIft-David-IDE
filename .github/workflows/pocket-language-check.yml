@@ -1,0 +1,26 @@
+name: Verify SourceKit-LSP on macOS
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'native-build/pocket_language.py'
+      - 'native-build/generate_project.py'
+      - 'web/language.mjs'
+      - 'tests/test_pocket_language.py'
+      - 'tests/language.test.mjs'
+      - '.github/workflows/pocket-language*.yml'
+permissions:
+  contents: read
+jobs:
+  sourcekit:
+    runs-on: macos-26
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify real Swift local-definition lookup
+        run: python3 tests/test_pocket_language.py -v
+      - name: Verify artifact identity and editor coordinates
+        run: node --test tests/language.test.mjs

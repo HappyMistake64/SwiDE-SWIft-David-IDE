@@ -1,5 +1,5 @@
 name: Pocket Original Xcode
-run-name: Original Xcode ${{ inputs.request_id }}
+run-name: Original Xcode ${{ inputs.request_id }} @ ${{ inputs.source_sha }}
 on:
   workflow_dispatch:
     inputs:

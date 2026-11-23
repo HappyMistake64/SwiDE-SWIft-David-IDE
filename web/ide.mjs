@@ -191,6 +191,7 @@
   }
   function checkpoint() {
     localStorage.setItem(checkpointKey, snapshot());
+    window.dispatchEvent(new Event("pocket-checkpoint"));
     report("Kontrolní bod projektu uložen.");
   }
   function restore() {
@@ -215,7 +216,26 @@
     if (details) details.open = true;
     control.focus();
   }
+  function revealTool(key) {
+    const box=id(key);
+    const panel=box.closest("[data-panel]");
+    if (panel) selectPanel(panel.dataset.panel);
+    const control=box.querySelector("button:not(:disabled),input:not(:disabled),select:not(:disabled),summary") || box;
+    let section=control.closest("details");
+    while (section) {
+      section.open=true;
+      section=section.parentElement?.closest("details");
+    }
+    control.focus();
+    box.scrollIntoView({block:"nearest"});
+  }
   const definitions = {
+    "assets":["Spravovat obrázky a imagesety",()=>revealTool("assets")],
+    "language":["Swift · přejít na definici a doplnit kód",()=>revealTool("language-tools")],
+    "editor-tools":["Šablony, skládání kódu a přesun souboru",()=>revealTool("editor-tools")],
+    "diff":["Zobrazit změny zdrojových souborů",()=>revealTool("source-control")],
+    "issues":["Diagnostika kompilátoru a výsledky testů",()=>revealTool("issues")],
+    "original":["Otevřít nebo sestavit původní ZIP projekt",()=>revealTool("zip-workspace")],
     "project-search":["Hledat v projektu", () => focusControl("project-search")],
     "find":["Hledat v souboru", () => focusControl("find-text")],
     "find-next":["Najít další výskyt", () => find()],

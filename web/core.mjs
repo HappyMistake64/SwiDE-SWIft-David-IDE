@@ -259,7 +259,7 @@ export class GithubAPI {
     return this.request("POST","/actions/workflows/pocket-ios.yml/dispatches",{
       ref:"main",inputs:{source_sha:r.source_sha,request_id:r.request_id,
         project_path:r.project_path,app_name:r.appName,bundle_id:r.bundleId,
-        ...(r.capturePreview ? {capture_preview:"true"} : {})}});
+        ...(r.capturePreview ? {capture_preview:"true", ...(r.debugAt ? {debug_at:r.debugAt} : {})} : {})}});
   }
   async getRun(id){return this.request("GET","/actions/runs/"+Number(id));}
   async findRun(r) {

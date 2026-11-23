@@ -1,0 +1,50 @@
+name: Pocket Swift language query
+run-name: Pocket SourceKit ${{ inputs.request_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      request_id: {description: Pocket snapshot UUID, required: true, type: string}
+      source_sha: {description: Immutable snapshot commit, required: true, type: string}
+      file: {description: Swift source in the app target, required: true, type: string}
+      line: {description: Zero-based line, required: true, type: string}
+      column: {description: Zero-based UTF-16 column, required: true, type: string}
+      mode: {description: SourceKit request, required: true, type: choice, options: [completion, definition]}
+permissions:
+  contents: read
+jobs:
+  language:
+    runs-on: macos-26
+    timeout-minutes: 7
+    env:
+      REQUEST_ID: ${{ inputs.request_id }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - name: Validate snapshot reference
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REQUEST_ID" =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]]
+      - uses: actions/checkout@v7
+        with:
+          path: worker
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          path: snapshot
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+          sparse-checkout: pocket-builds
+      - name: Query SourceKit-LSP
+        env:
+          SNAPSHOT_ROOT: snapshot
+          SWIFT_FILE: ${{ inputs.file }}
+          SOURCE_LINE: ${{ inputs.line }}
+          SOURCE_COLUMN: ${{ inputs.column }}
+          QUERY_MODE: ${{ inputs.mode }}
+          RESULT_FILE: language-result.json
+        run: python3 worker/native-build/pocket_language.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pocket-language-${{ inputs.request_id }}-${{ inputs.source_sha }}
+          path: language-result.json
+          if-no-files-found: error
+          retention-days: 7

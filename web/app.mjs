@@ -48,6 +48,7 @@ function renderFiles() {
   window.dispatchEvent(new Event("pocket-render"));
 }
 function renderBuilds() {
+  window.dispatchEvent(new Event("pocket-builds"));
   const wrapper=byId("builds");
   wrapper.replaceChildren();
   const previews=byId("preview-results");
@@ -175,12 +176,23 @@ async function submit(capturePreview = false) {
     if (state.settings.repo!==api.repo) throw Error("Repozitář se změnil, znovu se připoj.");
     if (!confirm((capturePreview ? "Spustit projekt v simulátoru a uložit snímek obrazovky? " : "") + "Odeslat zdrojové soubory do " + api.repo + " a spustit sestavení na GitHubu? U veřejného repozitáře budou soubory veřejné.")) return;
     const req=makeRequest(state.settings,state.project);
-    if (capturePreview) req.capturePreview=true;
+    if (capturePreview) {
+      req.capturePreview=true;
+      const where=byId("debug-at").value.trim();
+      if (where) {
+        const match=/^([A-Za-z0-9_][A-Za-z0-9_.-]{0,119}\.swift):([1-9][0-9]{0,5})$/.exec(where);
+        const files=Object.entries(state.project.files).filter(([path])=>path.split("/").pop()===match?.[1] && !path.startsWith("Tests/"));
+        if (!match || files.length!==1 || Number(match[2])>files[0][1].split("\n").length) throw Error("Bod zastavení vyžaduje jednoznačný soubor a existující řádek, například ContentView.swift:12.");
+        req.debugAt=where;
+      }
+    }
     document.querySelector('[data-view="console"]').click();
     state.builds.unshift(req);state.builds=state.builds.slice(0,30);persist();renderBuilds();
     note("Ukládám neměnný snímek projektu do GitHubu...");
     try {
-      req.source_sha=await api.snapshot(req,state.project);
+      const submitted=JSON.parse(JSON.stringify(state.project));
+      req.source_sha=await api.snapshot(req,submitted);
+      window.dispatchEvent(new CustomEvent("pocket-committed",{detail:{project:submitted,sha:req.source_sha}}));
       req.stage="committed";persist();renderBuilds();
       // Persist the source SHA BEFORE dispatch: a network failure must not auto-repeat the build.
       await api.dispatch(req);
@@ -209,6 +221,7 @@ async function refreshBuild(item) {
     }
     const run=located.run;
     item.run_id=run.id;
+    item.run_attempt=run.run_attempt;
     if (run.status!=="completed") {
       item.stage=run.status||"running";
       item.message="Čeká se na dokončení GitHub Actions.";
@@ -328,6 +341,20 @@ function init() {
   note("Lokální editor připraven. GitHub token není uložený na zařízení.");
 }
 window.pocketIDE = {
+  getAPI() {
+    syncSettings();
+    if (!api || api.repo !== state.settings.repo) throw Error("Připoj GitHub pro tento repozitář v nastavení projektu.");
+    return api;
+  },
+  getBuilds: () => state.builds,
+  commitProject(project,active) {
+    validateProject(project);
+    if (!Object.hasOwn(project.files,active)) throw Error("Soubor není v projektu.");
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({...state,project,active}));
+    state.project=project;
+    state.active=active;
+    renderFiles();
+  },
   getProject: () => state.project,
   getActive: () => state.active,
   save: saveEditing,

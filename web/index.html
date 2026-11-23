@@ -59,6 +59,8 @@
         <button type="button" data-command="checkpoint">Uložit kontrolní bod</button><button type="button" data-command="restore">Obnovit kontrolní bod</button>
         <input id="input-import" type="file" accept=".json,application/json" hidden>
       </div>
+      <details class="group"><summary>Obrázky a asset katalog</summary><div class="group-body" id="assets"><label>Přidat imageset<input id="asset-file" type="file" accept="image/png,image/jpeg"></label><ul id="asset-list"></ul><p id="asset-message" role="status"></p></div></details>
+      <details class="group"><summary>Změny zdrojových souborů</summary><div id="source-control" class="group-body"></div></details>
       <details class="group"><summary>ZIP archiv</summary><div id="zip-workspace" class="group-body"></div></details>
     </section>
     <section class="panel workspace" data-panel="code" data-view-panel="code" aria-label="Editor kódu">
@@ -74,6 +76,8 @@
         </div>
       </div>
       <div class="edit-bar"><select id="symbol-outline" aria-label="Přejít na symbol"></select><button type="button" data-edit="undo" aria-label="Zpět">↶</button><button type="button" data-edit="redo" aria-label="Znovu">↷</button><button type="button" data-edit="outdent" aria-label="Zmenšit odsazení">⇤</button><button type="button" data-edit="indent" aria-label="Zvětšit odsazení">⇥</button><button type="button" data-edit="comment" aria-label="Přepnout komentář">//</button></div><div class="source-status"><span id="filename">PocketApp.swift</span><span>UTF-8</span></div>
+      <details class="group"><summary>Nástroje editoru</summary><div id="editor-tools" class="group-body"></div></details>
+      <div id="language-tools"></div>
       <details class="group find-group"><summary>Najít a nahradit</summary><div class="group-body">
         <div class="form-grid"><label>Najít<input id="find-text" type="search" autocapitalize="off"></label><label>Nahradit za<input id="replace-text" autocapitalize="off"></label></div>
         <div class="inline-actions"><button type="button" data-command="find-next">Další výskyt</button><button type="button" data-command="replace">Nahradit</button><button type="button" data-command="replace-all">Nahradit vše</button></div>
@@ -82,6 +86,8 @@
     <section class="panel preview" data-panel="preview" data-view-panel="preview" hidden>
       <div class="panel-heading"><h1>Náhled</h1></div>
       <p>Sestav aktuální Pocket projekt na vzdáleném Macu a zachyť první obrazovku aplikace v simulátoru iPhonu.</p>
+      <label class="field">Volitelný bod zastavení LLDB<input id="debug-at" placeholder="ContentView.swift:12" autocapitalize="off" spellcheck="false"></label>
+      <p class="small">Pro jednorázový záznam zásobníku a lokálních proměnných zadej soubor a řádek dosažitelný při spuštění. Výpis najdeš v protokolech běhu na GitHubu.</p>
       <button id="simulate" type="button" class="primary">Spustit a pořídit snímek</button>
       <div id="preview-results" aria-live="polite"></div>
       <details class="group"><summary>Otevřít snímek ze Souborů</summary><div class="group-body">
@@ -93,6 +99,7 @@
     <section class="panel console" data-panel="console" data-view-panel="console" hidden>
       <div class="panel-heading"><h1>Konzole</h1><button type="button" id="btn-refresh">Obnovit běhy</button></div>
       <div id="status" class="status" role="status" aria-live="polite">Připraveno.</div>
+      <section id="issues" aria-label="Diagnostika a testy"></section>
       <h2>Historie sestavení</h2><div id="builds" class="build-list"></div>
       <details class="group"><summary>Instalace přes SideStore</summary><div class="group-body">
         <ol><li>U úspěšného sestavení klepni na <strong>Stáhnout ZIP s IPA</strong>. V Safari se případně přihlas ke GitHubu.</li>
@@ -110,5 +117,10 @@
   <script type="module" src="./syntax.mjs"></script>
   <script type="module" src="./ide.mjs"></script>
   <script type="module" src="./zip-workspace.mjs"></script>
+  <script type="module" src="./issues.mjs"></script>
+  <script type="module" src="./source-control.mjs"></script>
+  <script type="module" src="./editor-tools.mjs"></script>
+  <script type="module" src="./language.mjs"></script>
+  <script type="module" src="./assets.mjs"></script>
 </body>
 </html>

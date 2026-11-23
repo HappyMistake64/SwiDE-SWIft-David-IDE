@@ -1,9 +1,11 @@
+import {renderStringCatalog} from "./string-catalog.mjs";
+import {mountOriginalRun} from "./original-run.mjs";
 // Classic ZIP workspace for iPhone. Codec implementations are supplied by WebKit.
 const MiB = 1024 * 1024;
 const zipLimits = {input: 20 * MiB, expanded: 50 * MiB, entry: 10 * MiB, output: 32 * MiB, entries: 2000, text: MiB};
 const zipEncoder = new TextEncoder();
 const zipDecoder = new TextDecoder("utf-8", {fatal:true, ignoreBOM:true});
-const editablePath = /\.(?:swift|m|mm|h|c|cpp|hpp|json|xml|plist|md|txt|xcconfig|pbxproj|xcscheme|xcworkspacedata|strings|entitlements|storyboard|xib|yaml|yml|css|html|js|ts)$/i;
+const editablePath = /\.(?:swift|m|mm|h|c|cpp|hpp|json|xml|plist|md|txt|xcconfig|pbxproj|xcscheme|xcworkspacedata|strings|xcstrings|entitlements|storyboard|xib|yaml|yml|css|html|js|ts)$/i;
 const crcTable = Uint32Array.from({length:256}, (_, byte) => {
   for (let bit=0; bit<8; bit++) byte = (byte >>> 1) ^ ((byte & 1) ? 0xedb88320 : 0);
   return byte >>> 0;
@@ -268,17 +270,23 @@ export function mountZipWorkspace(container) {
   const editor = make("textarea");
   editor.spellcheck = false; editor.hidden = true; editor.setAttribute("aria-label","Text souboru v archivu");
   const status = make("p"); status.setAttribute("role","status");
-  container.append(choose,input,filename,label,editor,save,originalExport,status);
+  const catalogPanel = make("fieldset"); catalogPanel.hidden = true;
+  container.append(choose,input,filename,label,editor,catalogPanel,save,originalExport,status);
   let entries = [], archiveName = "", originalFile, db, workspaceId, editSequence = 0;
+  const updateOriginalRun = mountOriginalRun(container,()=>({entries,pack:()=>exportZipWorkspace(entries)}));
   function updateButtons(busy) {
-    choose.disabled = editor.disabled = busy;
+    choose.disabled = editor.disabled = catalogPanel.disabled = busy;
     select.disabled = busy || !entries.length;
     save.disabled = originalExport.disabled = busy || !originalFile;
   }
   const show = () => {
     const e = entries[Number(select.value)];
     const editable = e && typeof e.text === "string";
-    editor.hidden = !editable;
+    const isCatalog = editable && /\.xcstrings$/i.test(e.path);
+    editor.hidden = !editable || isCatalog;
+    catalogPanel.hidden = !isCatalog;
+    if (isCatalog) renderStringCatalog(catalogPanel, e.edit ?? e.text, next => saveEdit(e, next));
+    else catalogPanel.replaceChildren();
     editor.value = editable ? e.edit ?? e.text : "";
     status.textContent = !e ? "Archiv je prázdný." : editable
       ? (db ? "Změny se ukládají na tomto zařízení." : "Úložiště není dostupné. Ulož změny pomocí Exportovat ZIP.")
@@ -286,6 +294,7 @@ export function mountZipWorkspace(container) {
   };
   function displayArchive(candidate,file) {
     entries = candidate; originalFile = file; archiveName = file.name;
+    updateOriginalRun(entries);
     filename.textContent = file.name + " · " + entries.length + " položek";
     select.replaceChildren(...entries.map((e,i)=>{
       const option = make("option",e.path); option.value = String(i); return option;
@@ -313,14 +322,10 @@ export function mountZipWorkspace(container) {
   })();
   choose.addEventListener("click",()=>input.click());
   select.addEventListener("change",show);
-  editor.addEventListener("input",()=>{
-    const e = entries[Number(select.value)];
-    if (!e || typeof e.text !== "string") return;
-    const edited = e.crlf ? editor.value.replace(/\n/g,"\r\n") : editor.value;
-    if (zipEncoder.encode(edited).length > zipLimits.text) {
-      editor.value = e.edit ?? e.text;
-      status.textContent = "Limit pro textové úpravy je 1 MiB.";
-      return;
+  function saveEdit(e, edited) {
+    if (e !== entries[Number(select.value)] || editor.disabled) throw Error("Výběr souboru se změnil.");
+    if (zipEncoder.encode((e.bom ? "\ufeff" : "") + edited).length > zipLimits.text) {
+      throw Error("Limit pro textové úpravy je 1 MiB.");
     }
     e.edit = edited;
     if (db) {
@@ -332,6 +337,12 @@ export function mountZipWorkspace(container) {
         if (id === workspaceId && sequence === editSequence) status.textContent = "Změnu se nepodařilo uložit. Exportuj ZIP. " + error.message;
       });
     }
+  }
+  editor.addEventListener("input",()=>{
+    const e = entries[Number(select.value)];
+    if (!e || typeof e.text !== "string") return;
+    try { saveEdit(e, e.crlf ? editor.value.replace(/\n/g,"\r\n") : editor.value); }
+    catch (error) { editor.value = e.edit ?? e.text; status.textContent = error.message; }
   });
   input.addEventListener("change", async () => {
     const file = input.files[0];

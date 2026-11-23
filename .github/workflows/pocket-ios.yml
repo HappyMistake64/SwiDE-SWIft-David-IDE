@@ -34,6 +34,12 @@ on:
         required: false
         default: false
 
+      debug_at:
+        description: Optional generated simulator breakpoint (e.g. ContentView.swift:7), requires capture_preview
+        type: string
+        required: false
+        default: ''
+
 permissions:
   contents: read
 
@@ -55,7 +61,12 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           REQUEST_ID: ${{ inputs.request_id }}
           PROJECT_PATH: ${{ inputs.project_path }}
+          DEBUG_AT: ${{ inputs.debug_at }}
+          CAPTURE_PREVIEW: ${{ inputs.capture_preview }}
         run: |
+          if [[ -n "$DEBUG_AT" ]]; then
+            [[ "$CAPTURE_PREVIEW" == "true" && "$DEBUG_AT" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,119}\.swift:[1-9][0-9]{0,5}$ ]] || { echo 'Invalid preview breakpoint.' >&2; exit 1; }
+          fi
           if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo 'source_sha must be a complete commit SHA.' >&2
             exit 1
@@ -214,6 +225,7 @@ jobs:
         env:
           REQUEST_ID: ${{ inputs.request_id }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
+          DEBUG_AT: ${{ inputs.debug_at }}
         run: |
           set -o pipefail
           bash native-build/simulator_preview.sh 2>&1 | tee artifacts/simulator-preview.log
@@ -227,12 +239,23 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Collect compiler diagnostics and XCTest results
+        if: ${{ always() && hashFiles('artifacts/build-identity.json') != '' }}
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          TEST_DETAIL: ${{ steps.tests.outputs.result }}
+        run: python3 native-build/collect_issues.py --repository "$GITHUB_REPOSITORY" --outcome "$TEST_OUTCOME" --detail "$TEST_DETAIL"
+
       - name: Save available build logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: pocket-ios-logs-${{ inputs.request_id }}
-          path: artifacts/*.log
+          path: |
+            artifacts/*.log
+            artifacts/pocket-issues.json
+            artifacts/preview/debug.json
+            artifacts/preview/debug.txt
           if-no-files-found: warn
           retention-days: 7
 

@@ -1,5 +1,5 @@
 name: Pocket Original Simulator
-run-name: Original Simulator ${{ inputs.request_id }}
+run-name: Original Simulator ${{ inputs.request_id }} @ ${{ inputs.source_sha }}
 on:
   workflow_dispatch:
     inputs:

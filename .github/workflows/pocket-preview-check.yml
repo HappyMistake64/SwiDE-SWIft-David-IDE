@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/pocket-preview-check.yml'
       - 'native-build/simulator_preview.sh'
+      - 'native-build/debug_probe.py'
+      - 'tests/fixtures/simulator-debug.swift'
 permissions:
   contents: read
 jobs:
@@ -14,15 +16,29 @@ jobs:
     timeout-minutes: 30
     env:
       REQUEST_ID: bca30ccb-961e-49ea-a343-5de9770125b4
+      DEBUG_AT: PocketApp.swift:7
       BUNDLE_ID: cz.davidvolf.pocketpreviewcheck
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - run: python3 native-build/generate_project.py --input "pocket-builds/$REQUEST_ID.json" --output build-project --app-name PocketPreviewCheck --bundle-id "$BUNDLE_ID"
+      - run: cp tests/fixtures/simulator-debug.swift build-project/Sources/PocketApp.swift
       - run: bash native-build/simulator_preview.sh
+      - name: Check debugger reached the fixture during the second launch
+        run: |
+          python3 - <<'PYTHON'
+          import json, pathlib
+          r=json.loads(pathlib.Path("artifacts/preview/debug.json").read_text())
+          assert r["status"] == "hit", r
+          assert r["frames"][0]["file"] == "PocketApp.swift", r["frames"]
+          assert r["frames"][0]["line"] == 7, r["frames"]
+          assert any(v["name"] == "pocketMarker" and v["value"] == "4817" for v in r["locals"]), r["locals"]
+          assert pathlib.Path("artifacts/preview/screenshot.png").stat().st_size > 32
+          PYTHON
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Simulator-screenshot
-          path: artifacts/preview/screenshot.png
+          path: artifacts/preview/
           if-no-files-found: error

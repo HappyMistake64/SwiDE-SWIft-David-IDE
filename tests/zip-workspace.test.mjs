@@ -36,9 +36,13 @@ const require = createRequire(import.meta.url);
 let chromium;
 try { ({chromium} = require("playwright")); } catch { /* Optional integration runner. */ }
 test("ZIP survives reloads, rejected imports, and exports the exact original", {skip:!chromium}, async t => {
-  const js = await readFile(new URL("../web/zip-workspace.mjs",import.meta.url));
-  const server = createServer((req,res)=>{
-    if (req.url === "/zip.mjs") { res.setHeader("Content-Type","text/javascript"); res.end(js); return; }
+  const server = createServer(async (req,res)=>{
+    if (/^\/[a-z][a-z0-9-]*\.mjs$/.test(req.url)) {
+      const path=req.url === "/zip.mjs" ? "zip-workspace.mjs" : req.url.slice(1);
+      try { res.setHeader("Content-Type","text/javascript"); res.end(await readFile(new URL("../web/"+path,import.meta.url))); }
+      catch { res.statusCode=404;res.end(); }
+      return;
+    }
     res.setHeader("Content-Type","text/html"); res.end('<main id="zip-workspace"></main><script type="module" src="/zip.mjs"></script>');
   });
   await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));

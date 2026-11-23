@@ -1,0 +1,77 @@
+name: Original Xcode project regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/original-run.mjs'
+      - 'web/zip-workspace.mjs'
+      - 'web/core.mjs'
+      - 'native-build/generate_project.py'
+      - 'native-build/original-xcode/**'
+      - 'tests/original-run.test.mjs'
+      - 'tests/original-snapshot-fixture.mjs'
+      - '.github/workflows/pocket-original-*.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-ipa:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Exercise frontend ZIP snapshot and workflow identity
+        run: |
+          node --test tests/original-run.test.mjs
+          node tests/original-snapshot-fixture.mjs "$RUNNER_TEMP/original-check"
+      - name: Prepare and compile the generated public sample for iPhone
+        env:
+          CHECK_DIR: ${{ runner.temp }}/original-check
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          work = Path(os.environ["CHECK_DIR"])
+          inputs = json.loads((work / "inputs.json").read_text())
+          head = subprocess.check_output(["git","-C",str(work / "snapshot"),"rev-parse","HEAD"],text=True).strip()
+          assert head == inputs["source_sha"] and inputs["allow_project_code"] == "true"
+          subprocess.run(["python3","native-build/original-xcode/build_original.py",
+            "--snapshot",str(work / "snapshot"),"--source-sha",head,"--request-id",inputs["request_id"],
+            "--output",str(work / "prepared"),"--allow-project-code","--build"],check=True)
+          source = work / "prepared/Demo/Sources/ContentView.swift"
+          assert "// Original ZIP editor fixture" in source.read_text()
+          PY
+      - name: Verify the device IPA and its signing state
+        env:
+          CHECK_DIR: ${{ runner.temp }}/original-check
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, plistlib, subprocess, zipfile
+          root = Path(os.environ["CHECK_DIR"])
+          app = "Payload/PocketApp.app/"
+          with zipfile.ZipFile(root / "artifacts/unsigned.ipa") as bundle:
+              assert bundle.testzip() is None
+              assert all(name == "Payload/" or name.startswith(app) for name in bundle.namelist())
+              assert app+"embedded.mobileprovision" not in bundle.namelist()
+              assert not any("/_CodeSignature/" in name for name in bundle.namelist())
+              info = plistlib.loads(bundle.read(app+"Info.plist"))
+              assert info["CFBundleIdentifier"] == "org.example.originalcheck"
+              assert "iPhoneOS" in info["CFBundleSupportedPlatforms"]
+              assert info["CFBundleExecutable"] == "PocketApp"
+              binary = root / "checked-device-binary"
+              binary.write_bytes(bundle.read(app+info["CFBundleExecutable"]))
+          output = subprocess.check_output(["xcrun","vtool","-show-build",str(binary)],text=True)
+          assert any(line.split()==["platform","IOS"] for line in output.splitlines()), output
+          signing = subprocess.run(["codesign","-dv","--verbose=4",str(binary)],capture_output=True,text=True)
+          if signing.returncode == 0:
+              assert "Signature=adhoc" in signing.stderr and "Authority=" not in signing.stderr, signing.stderr
+          else:
+              assert "not signed at all" in signing.stderr, signing.stderr
+          print("Checked unsigned device IPA, bundle metadata and Mach-O platform.")
+          PY

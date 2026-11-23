@@ -3,6 +3,9 @@
 set -euo pipefail
 : "${REQUEST_ID:?}" "${BUNDLE_ID:?}"
 mkdir -p artifacts/preview
+if [[ -n "${DEBUG_AT:-}" ]]; then
+  python3 native-build/debug_probe.py "$DEBUG_AT" --sources build-project/Sources
+fi
 
 device=""
 cleanup() {
@@ -53,3 +56,14 @@ if (len(image) < 33 or image[:8] != b'\x89PNG\r\n\x1a\n' or image[12:16] != b'IH
         or min(struct.unpack('>II', image[16:24])) < 1):
     raise SystemExit('Simulator did not produce a valid PNG screenshot.')
 PY
+
+# Preserve the normal launch screenshot. Debug a separate cold launch so a startup
+# breakpoint cannot suspend the first frame or race the screenshot capture.
+if [[ -n "${DEBUG_AT:-}" ]]; then
+  xcrun simctl terminate "$device" "$BUNDLE_ID"
+  launch=$(xcrun simctl launch --wait-for-debugger "$device" "$BUNDLE_ID")
+  pid=${launch##*: }
+  [[ "${launch%: *}" == "$BUNDLE_ID" && "$pid" =~ ^[1-9][0-9]*$ ]]
+  python3 native-build/debug_probe.py "$DEBUG_AT" --sources build-project/Sources \
+    --pid "$pid" --executable "$app/PocketApp" --output artifacts/preview/debug.json
+fi

@@ -64,7 +64,9 @@ def simulator():
         version = tuple(int(x or 0) for x in match.groups())
         for device in devices:
             if device.get("isAvailable") and device.get("name","").startswith("iPhone"):
-                choices.append((version,device["name"],str(uuid.UUID(device["udid"]))))
+                udid = device["udid"]
+                uuid.UUID(udid)
+                choices.append((version,device["name"],udid))
     if not choices:
         raise RuntimeError("No available iOS 17+ iPhone simulator")
     print(max(choices)[2])

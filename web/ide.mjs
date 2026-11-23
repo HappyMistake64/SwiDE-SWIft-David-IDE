@@ -29,7 +29,17 @@
     inlineStatus.dataset.type = status.dataset.type || "info";
     panel.append(inlineStatus);
   }).observe(status, {subtree:true, childList:true, characterData:true});
-  function selectPanel(name) {
+  function selectPanel(name, topic = "files", railCommand = null) {
+    document.body.dataset.workspace = name;
+    id("file-actions-menu").hidden = true;
+    id("file-actions").setAttribute("aria-expanded","false");
+    if (name === "project") {
+      document.body.dataset.projectTopic = topic;
+      for (const part of document.querySelectorAll(".project [data-topic]")) {
+        part.hidden = part.dataset.topic !== topic;
+        if (part.tagName === "DETAILS") part.open = !part.hidden;
+      }
+    }
     const panels = [...document.querySelectorAll("[data-view-panel], [data-panel]")].filter(p => !p.matches("button,a"));
     if (!panels.some(p => (p.dataset.viewPanel || p.dataset.panel) === name)) return;
     inlineStatus.remove();
@@ -38,8 +48,8 @@
       panel.hidden = !active;
       panel.classList.toggle("active", active);
     }
-    for (const control of document.querySelectorAll("[data-view]")) {
-      const active = control.dataset.view === name;
+    for (const control of document.querySelectorAll(".activity-rail button")) {
+      const active = railCommand ? control.dataset.command === railCommand : control.dataset.view === name;
       if (active) control.setAttribute("aria-current", "page");
       else control.removeAttribute("aria-current");
       control.classList.toggle("active", active);
@@ -72,46 +82,112 @@
     showCode();
     if (Number.isInteger(start)) selectRange(start, end);
   }
+  function icon(name) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg"), use = document.createElementNS(ns, "use");
+    svg.setAttribute("aria-hidden", "true");
+    use.setAttribute("href", "#ico-" + name);
+    svg.append(use);
+    return svg;
+  }
+  let selectedPath = "", lastActive = "", treeExpanded = true;
+  function renderPeek() {
+    const p = api().getProject(), path = selectedPath;
+    const text = p.files[path], image = p.binaries?.[path];
+    id("navigator-preview").hidden = typeof text !== "string" && !image;
+    id("open-selected-file").hidden = typeof text !== "string";
+    const code = id("peek-code"); code.replaceChildren();
+    const file = path.split("/").pop();
+    id("peek-name").textContent = file;
+    if (typeof text === "string") {
+      const lines = text.split("\n");
+      const declaration = /^(?:\s*(?:public|private|final|indirect)\s+)*\s*(?:struct|class|enum|actor|func|protocol|extension)\s/u;
+      const first = Math.max(0, lines.findIndex(line => declaration.test(line)));
+      id("peek-name").textContent = file + ":" + (first + 1);
+      id("open-selected-file").onclick = () => {
+        const offset = first ? lines.slice(0, first).join("\n").length + 1 : 0;
+        open(path, offset, offset);
+      };
+      for (let i = first; i < Math.min(first + 3, lines.length); i++) {
+        const row = document.createElement("div"), num = document.createElement("span"), line = document.createElement("code");
+        num.className = "peek-number";num.textContent = String(i + 1);
+        const raw = lines[i].slice(0, 260);
+        if (/\.swift$/i.test(path)) {
+          const tokens = /("(?:\\.|[^"\\])*"|\/\/.*|\b(?:struct|class|func|var|let|some|import|return|private|public|enum|actor|protocol|extension)\b|\b[A-Z][\w]*\b|\b\d+\b)/gu;
+          let start=0;
+          for (const match of raw.matchAll(tokens)) {
+            line.append(document.createTextNode(raw.slice(start,match.index)));
+            const token = document.createElement("span"), value = match[0];
+            token.className = "tok-" + (value[0] === '"' ? "string" : value.startsWith("//") ? "comment" : /^\d/u.test(value) ? "number" : /^[A-Z]/u.test(value) ? "type" : "keyword");
+            token.textContent=value; line.append(token); start=match.index+value.length;
+          }
+          line.append(document.createTextNode(raw.slice(start)));
+        } else line.textContent = raw;
+        row.append(num, line); code.append(row);
+      }
+    } else if (image) {
+      const img = document.createElement("img");
+      img.alt = file; img.src = "data:" + image.mime + ";base64," + image.base64; code.append(img);
+    }
+  }
   function renderTree() {
     const root = id("tree");
     if (!root || !api()) return;
-    const query = (id("ide-filter")?.value || "").trim().toLocaleLowerCase();
+    const project = api().getProject(), active = api().getActive();
+    if (active !== lastActive || !(Object.hasOwn(project.files, selectedPath) || Object.hasOwn(project.binaries || {}, selectedPath)))
+      selectedPath = active;
+    lastActive = active;
+    id("tree-root-title").textContent = id("app-name").value.trim() || id("ide-title").textContent;
+    const query = id("ide-filter").value.trim().toLocaleLowerCase();
     const tree = new Map();
-    for (const path of Object.keys(api().getProject().files).sort()) {
-      if (!path.toLocaleLowerCase().includes(query)) continue;
+    function add(path, directory) {
+      if (!path.toLocaleLowerCase().includes(query)) return;
       const parts = path.split("/");
       let branch = tree;
       parts.forEach((part, i) => {
-        if (i === parts.length - 1) branch.set(part, path);
+        if (!directory && i === parts.length - 1) branch.set(part, path);
         else {
           if (!branch.has(part)) branch.set(part, new Map());
           branch = branch.get(part);
         }
       });
     }
+    for (const path of project.dirs || []) add(path, true);
+    for (const path of [...Object.keys(project.files), ...Object.keys(project.binaries || {})]) add(path, false);
     root.replaceChildren();
     function draw(branch, parent, prefix) {
       for (const [name, value] of [...branch].sort(([an,av], [bn,bv]) => Number(bv instanceof Map)-Number(av instanceof Map) || an.localeCompare(bn))) {
         const full = prefix + name;
         if (value instanceof Map) {
           const expanded = !!query || !folded.has(full);
-          const control = button((expanded ? "▾ " : "▸ ") + name, () => {
+          const control = button(name, () => {
             if (folded.has(full)) folded.delete(full); else folded.add(full);
             renderTree();
+            Array.from(root.querySelectorAll("[data-dir]")).find(b=>b.dataset.dir === full)?.focus({preventScroll:true});
           }, "tree-folder");
+          control.dataset.dir = full;
+          control.prepend(icon("down"), icon("folder"));
           control.setAttribute("aria-expanded", String(expanded));
           parent.append(control);
           if (expanded) {
             const group = document.createElement("div");
             group.className = "tree-group";
-            group.style.paddingInlineStart = "12px";
             draw(value, group, full + "/"); parent.append(group);
           }
         } else {
-          const item = button(name, () => open(value), "tree-file");
+          const item = button(name, () => {
+            selectedPath = value;
+            for (const file of root.querySelectorAll("[data-path]")) {
+              file.classList.toggle("active", file === item);
+              if (file === item) file.setAttribute("aria-current", "true"); else file.removeAttribute("aria-current");
+            }
+            renderPeek();
+          }, "tree-file");
           item.title = value;
           item.dataset.path = value;
-          if (value === api().getActive()) {
+          const kind = /\.swift$/i.test(name) ? "swift" : Object.hasOwn(project.binaries || {}, value) ? "photo" : "doc";
+          item.dataset.kind = kind; item.prepend(icon(kind));
+          if (value === selectedPath) {
             item.classList.add("active"); item.setAttribute("aria-current", "true");
           }
           parent.append(item);
@@ -119,7 +195,10 @@
       }
     }
     draw(tree, root, "");
-    if (!tree.size) root.textContent = "Žádné soubory.";
+    if (!tree.size) root.textContent = query ? "Žádné odpovídající soubory." : "Projekt je prázdný.";
+    root.hidden = !(query || treeExpanded);
+    id("tree-root").setAttribute("aria-expanded", String(!root.hidden));
+    renderPeek();
   }
   function renderResults() {
     const out = id("ide-results");
@@ -212,7 +291,10 @@
   function focusControl(key) {
     const control = id(key);
     const panel = control.closest("[data-view-panel],[data-panel]");
-    if (panel) selectPanel(panel.dataset.viewPanel || panel.dataset.panel);
+    if (panel) {
+      const map = {"project-search":"project-search", "connect-token":"connection"};
+      selectPanel(panel.dataset.viewPanel || panel.dataset.panel, control.closest("[data-topic]")?.dataset.topic, map[key]);
+    }
     const details = control.closest("details");
     if (details) details.open = true;
     control.focus();
@@ -220,7 +302,10 @@
   function revealTool(key) {
     const box=id(key);
     const panel=box.closest("[data-panel]");
-    if (panel) selectPanel(panel.dataset.panel);
+    if (panel) {
+      const map = {"source-control":"diff", issues:"issues", "zip-workspace":"original"};
+      selectPanel(panel.dataset.panel,box.closest("[data-topic]")?.dataset.topic,map[key]);
+    }
     const control=box.querySelector("button:not(:disabled),input:not(:disabled),select:not(:disabled),summary") || box;
     let section=control.closest("details");
     while (section) {
@@ -231,6 +316,8 @@
     box.scrollIntoView({block:"nearest"});
   }
   const definitions = {
+    "snapshots":["Import, export a kontrolní bod projektu",()=>revealTool("snapshots")],
+    "device":["Soubory a složky z iPhonu",()=>revealTool("device-files")],
     "assets":["Spravovat obrázky a imagesety",()=>revealTool("assets")],
     "language":["Swift · přejít na definici a doplnit kód",()=>revealTool("language-tools")],
     "editor-tools":["Šablony, skládání kódu a přesun souboru",()=>revealTool("editor-tools")],
@@ -364,6 +451,30 @@
     else if (mod && e.key.toLowerCase() === "l" && e.target === editor) { e.preventDefault(); run("goto-line"); }
     else if (e.key === "Escape" && dialog.open) { e.preventDefault(); closePalette(); }
   });
+  id("btn-device-import").addEventListener("click", () => {
+    selectPanel("project", "device");
+    document.dispatchEvent(new Event("pocket:import-files"));
+  });
+  document.addEventListener("pocket:device-imported", event => {
+    const path = event.detail?.paths?.[0], project = api().getProject();
+    if (!path || !(Object.hasOwn(project.files,path) || Object.hasOwn(project.binaries || {},path))) return;
+    selectedPath=path; lastActive=api().getActive(); treeExpanded=true;
+    const parts=path.split("/");
+    for (let n=1; n<parts.length; n++) folded.delete(parts.slice(0,n).join("/"));
+    id("ide-filter").value="";
+    selectPanel("project","files"); renderTree();
+    const row = Array.from(id("tree").querySelectorAll("[data-path]")).find(item=>item.dataset.path===path);
+    row?.focus({preventScroll:true}); row?.scrollIntoView({block:"nearest"});
+  });
+  id("tree-root").addEventListener("click", () => { treeExpanded=!treeExpanded; renderTree(); });
+  id("file-actions").addEventListener("click", () => {
+    const menu=id("file-actions-menu");
+    menu.hidden=!menu.hidden; id("file-actions").setAttribute("aria-expanded",String(!menu.hidden));
+  });
+  id("file-actions-menu").addEventListener("click", () => {
+    id("file-actions-menu").hidden=true; id("file-actions").setAttribute("aria-expanded","false");
+  });
+  id("app-name").addEventListener("input",renderTree);
   id("ide-filter")?.addEventListener("input", renderTree);
   id("project-search").addEventListener("input", renderResults);
   id("find-text").addEventListener("input", () => find(false, false));
@@ -374,5 +485,5 @@
   render();
   let initial = "";
   try { initial = localStorage.getItem(panelKey) || ""; } catch {}
-  if (initial) selectPanel(initial);
+  selectPanel(["project","code","preview","console"].includes(initial) ? initial : "project");
 })();

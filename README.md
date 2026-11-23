@@ -4,9 +4,11 @@ Created by David Volf.
 
 Mobilní vývojové prostředí pro tvorbu Swift/SwiftUI aplikací z iPhonu s kompilací přes GitHub Actions na vzdáleném Macu.
 
-## Mobilní IDE 0.3.2
+## Mobilní IDE 0.4.0
 
 [Stáhnout aktuální editor](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/Xcode-Pocket-Editor.ipa) · [Rozsah funkcí a rozdíly oproti Xcode](docs/XCODE-PARITA.md)
+
+V navigátoru **Soubory** přidáš tlačítkem **+** jednotlivé soubory z aplikace Soubory na iPhonu. U zdrojového kódu vyber UTF-8 soubor s příponou `.swift`. Můžeš vybrat více souborů najednou. Ve výchozím nastavení se Swift přidá do kořene Pocket projektu a podporované obrázky a datové soubory do `Resources/`. Pokud už některá cesta v projektu existuje, celý výběr se zastaví před zápisem. Pocket projekt pojme až 200 souborů v celkovém limitu 4 MB včetně zakódovaných prostředků. Pro původní projekt se zachováním uspořádání složek použij import ZIP.
 
 V paletě příkazů zvol **Rychle otevřít** a napiš například `ContentView.swift:12`. Nástroje editoru umí přesouvat řádky, měnit velikost písmen a vybírat párové závorky.
 

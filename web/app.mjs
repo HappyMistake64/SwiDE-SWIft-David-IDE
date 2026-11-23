@@ -166,7 +166,7 @@ async function submit(capturePreview = false) {
   byId("btn-build").disabled=true;
   try {
     if (!api) {
-      document.querySelector('[data-view="project"]').click();
+      document.querySelector('.activity-rail [data-command="connection"]').click();
       const settings = byId("connect-token").closest("details");
       if (settings) settings.open = true;
       byId("connect-token").focus();

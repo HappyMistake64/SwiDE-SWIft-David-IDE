@@ -57,9 +57,47 @@ try {
   } finally {
     window.fetch = nativeFetch;
   }
-  document.querySelector('[data-view="code"]').click(); code.scrollIntoView({block:"center"});
+  document.querySelector('[data-view="project"]').click();
+  const importAction = id("btn-device-import");
+  const fileInput = document.querySelector("#device-files input[type=file]");
+  assert(importAction && fileInput, "Navigator file import is unavailable");
+
+  // The simulator exercises the UI route to its genuine HTML file input. Suppress
+  // only the OS chooser and supply a FileList as if Files.app had returned it.
+  let requestedChooser = false;
+  fileInput.addEventListener("click", event => {
+    event.preventDefault();
+    requestedChooser = true;
+  }, {once:true});
+  importAction.click();
+  assert(requestedChooser, "Navigator import action did not reach the file picker");
+  const importedName = "ReceiptView.swift";
+  const importedSource = 'import SwiftUI\n\nstruct ReceiptView: View {\n    var body: some View { Text("Účtenka") }\n}\n';
+  const selection = new DataTransfer();
+  selection.items.add(new File([importedSource], importedName, {type:"text/plain"}));
+  fileInput.files = selection.files;
+  fileInput.dispatchEvent(new Event("change", {bubbles:true}));
+  for (let i=0; i<100 && window.pocketIDE.getActive() !== importedName; i++) await wait(40);
+  const imported = window.pocketIDE.getProject().files;
+  assert(imported[importedName] === importedSource && imported[name].endsWith(marker),
+    "Imported file or previous edit missing: " + document.querySelector("#device-files [role=status]").textContent);
+  const saved = JSON.parse(localStorage.getItem("xcode-pocket-standalone-v1"));
+  assert(saved.project.files[importedName] === importedSource && saved.active === importedName,
+    "Imported source or active file missing from saved project");
+  const row = () => document.querySelector('#tree [data-path="ReceiptView.swift"]');
+  document.querySelector('[data-view="project"]').click();
+  assert(row(), "Imported Swift file missing from navigator");
+  row().click();
+  id("open-selected-file").click();
+  code.scrollIntoView({block:"center"});
+  assert(visible(code) && code.value === importedSource, "Navigator did not open the imported Swift source");
+  document.querySelector('[data-view="project"]').click();
+  row().click();
+  document.activeElement?.blur();
+  window.scrollTo(0, 0);
   return {passed:true, engine:"WKWebView", origin:location.protocol, edited:name, requests:verified,
-    tokenPersisted:false, simulatedGitHubResponse:true, userAgent:navigator.userAgent};
+    tokenPersisted:false, simulatedGitHubResponse:true, importedFile:importedName,
+    simulatedPickerSelection:true, persistedImportedSource:true, userAgent:navigator.userAgent};
 } catch (err) {
   return {passed:false, error:String(err.message || err), origin:location.protocol};
 }

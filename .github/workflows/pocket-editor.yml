@@ -1,0 +1,42 @@
+name: Build Xcode Pocket editor for iPhone
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'pocket-editor/**'
+      - '.github/workflows/pocket-editor.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  editor:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --test tests/web-core.test.mjs
+      - run: bash pocket-editor/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Xcode-Pocket-Editor
+          path: dist/Xcode-Pocket-Editor.ipa
+          if-no-files-found: error
+  publish:
+    needs: editor
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Xcode-Pocket-Editor
+      - name: Publish the installable editor package for SideStore
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "pocket-editor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" Xcode-Pocket-Editor.ipa \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
+            --title "Xcode Pocket Editor · build $GITHUB_RUN_NUMBER" \
+            --notes 'Editor Swift projektů pro iPhone. Soubor IPA podepíše a nainstaluje SideStore.'

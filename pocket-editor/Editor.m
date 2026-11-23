@@ -22,6 +22,7 @@
     WKWebViewConfiguration *configuration = [[WKWebViewConfiguration alloc] init];
     configuration.websiteDataStore = WKWebsiteDataStore.defaultDataStore;
     [configuration.userContentController addScriptMessageHandler:self name:@"exportProject"];
+    [configuration.userContentController addScriptMessageHandler:self name:@"exportWorkspaceZip"];
     self.browser = [[WKWebView alloc] initWithFrame:CGRectZero configuration:configuration];
     self.browser.navigationDelegate = self;
     self.browser.UIDelegate = self;
@@ -114,18 +115,48 @@
 
 // WKWebView presents the system file picker for the editor's HTML file inputs on iOS.
 - (void)userContentController:(WKUserContentController *)controller didReceiveScriptMessage:(WKScriptMessage *)message {
-    if (![message.name isEqualToString:@"exportProject"] || !message.frameInfo.isMainFrame ||
-        ![self isEditorURL:message.frameInfo.request.URL] || self.presentedViewController) return;
-    if (![message.body isKindOfClass:NSString.class]) return;
-    NSData *data = [(NSString *)message.body dataUsingEncoding:NSUTF8StringEncoding];
-    if (!data.length || data.length > 4000000 ||
-        ![[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] isKindOfClass:NSDictionary.class]) {
-        [self showError:@"Export vyžaduje platný JSON projektu do velikosti 4 MB."];
+    if (!message.frameInfo.isMainFrame || ![self isEditorURL:message.frameInfo.request.URL] ||
+        self.presentedViewController) return;
+
+    NSData *data = nil;
+    NSString *filename = nil;
+    if ([message.name isEqualToString:@"exportProject"]) {
+        if (![message.body isKindOfClass:NSString.class]) return;
+        data = [(NSString *)message.body dataUsingEncoding:NSUTF8StringEncoding];
+        if (!data.length || data.length > 4000000 ||
+            ![[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] isKindOfClass:NSDictionary.class]) {
+            [self showError:@"Export vyžaduje platný JSON projektu do velikosti 4 MB."];
+            return;
+        }
+        filename = @"xcode-pocket-project.json";
+    } else if ([message.name isEqualToString:@"exportWorkspaceZip"]) {
+        if (![message.body isKindOfClass:NSDictionary.class]) return;
+        NSDictionary *payload = message.body;
+        filename = payload[@"name"];
+        NSString *encoded = payload[@"base64"];
+        NSUInteger maxBytes = 32 * 1024 * 1024;
+        if (![filename isKindOfClass:NSString.class] || !filename.length || filename.length > 128 ||
+            ![filename isEqualToString:filename.lastPathComponent] || [filename hasPrefix:@"."] ||
+            [filename containsString:@"\\"] || ![filename.pathExtension.lowercaseString isEqualToString:@"zip"] ||
+            [filename rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound ||
+            ![encoded isKindOfClass:NSString.class] || !encoded.length || encoded.length > ((maxBytes + 2) / 3) * 4) {
+            [self showError:@"Export ZIP vyžaduje platný název a archiv do velikosti 32 MiB."];
+            return;
+        }
+        data = [[NSData alloc] initWithBase64EncodedString:encoded options:0];
+        // The web exporter emits standard ZIP local headers (or an empty ZIP end record).
+        const unsigned char *bytes = data.bytes;
+        if (data.length < 22 || data.length > maxBytes || bytes[0] != 'P' || bytes[1] != 'K' ||
+            !((bytes[2] == 3 && bytes[3] == 4) || (bytes[2] == 5 && bytes[3] == 6))) {
+            [self showError:@"Archiv ZIP se nepodařilo načíst."];
+            return;
+        }
+    } else {
         return;
     }
     NSFileManager *manager = NSFileManager.defaultManager;
     NSURL *directory = [manager.temporaryDirectory URLByAppendingPathComponent:NSUUID.UUID.UUIDString isDirectory:YES];
-    NSURL *file = [directory URLByAppendingPathComponent:@"xcode-pocket-project.json"];
+    NSURL *file = [directory URLByAppendingPathComponent:filename];
     NSError *error = nil;
     if (![manager createDirectoryAtURL:directory withIntermediateDirectories:NO attributes:nil error:&error] ||
         ![data writeToURL:file options:NSDataWritingAtomic error:&error]) {

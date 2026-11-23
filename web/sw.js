@@ -1,30 +1,40 @@
-// Offline fallback only. While online, always fetch fresh editor modules.
-const CACHE="pocket-editor-v2";
-const ASSETS=["./","./index.html","./styles.css","./app.mjs","./core.mjs","./manifest.webmanifest","./icon.svg"];
-self.addEventListener("install",event=>{
-  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
+// Online requests use current resources. Keep the complete shell available offline.
+const CACHE_PREFIX = "pocket-editor-";
+const CACHE = CACHE_PREFIX + "v0.2.0-1";
+const ASSETS = [
+  "./", "./index.html", "./styles.css", "./app.mjs", "./core.mjs", "./ide.mjs",
+  "./syntax.mjs", "./zip-workspace.mjs", "./manifest.webmanifest", "./icon.svg"
+];
+const assetURLs = new Set(ASSETS.map(path => new URL(path, self.registration.scope).href));
+
+self.addEventListener("install", event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
-self.addEventListener("activate",event=>{
+
+self.addEventListener("activate", event => {
   event.waitUntil(Promise.all([
-    caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))),
+    caches.keys().then(keys => Promise.all(keys
+      .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE)
+      .map(key => caches.delete(key)))),
     self.clients.claim()
   ]));
 });
-self.addEventListener("fetch",event=>{
-  const url=new URL(event.request.url);
-  if (event.request.method!=="GET" || url.origin!==self.location.origin) return;
-  const fallback=event.request.mode==="navigate"?"./index.html":event.request;
-  event.respondWith(
-    fetch(event.request,{cache:"no-store"}).then(response=>{
-      if (response.ok && response.type==="basic") {
-        const copy=response.clone();
-        event.waitUntil(caches.open(CACHE).then(cache=>cache.put(event.request,copy)));
+
+self.addEventListener("fetch", event => {
+  const request = event.request;
+  const navigation = request.mode === "navigate";
+  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin ||
+      (!assetURLs.has(request.url) && !navigation)) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    try {
+      const response = await fetch(request, {cache: "no-store"});
+      if (response.ok && response.type === "basic" && assetURLs.has(request.url)) {
+        await cache.put(request, response.clone()).catch(() => {});
       }
       return response;
-    }).catch(async()=>{
-      const saved=await caches.match(fallback);
-      if (saved) return saved;
-      return Response.error();
-    })
-  );
+    } catch {
+      return (await cache.match(navigation ? "./index.html" : request)) || Response.error();
+    }
+  })());
 });

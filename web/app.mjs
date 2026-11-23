@@ -25,6 +25,7 @@ function htmlEl(tag,className,text) {
 }
 function syncSettings() {
   state.settings=validateSettings({repo:byId("repo").value,appName:byId("app-name").value,bundleId:byId("bundle-id").value});
+  byId("ide-title").textContent=state.settings.appName;
   persist();
 }
 function saveEditing() {
@@ -41,10 +42,16 @@ function renderFiles() {
   }));
   byId("code").value=state.project.files[state.active]||"";
   byId("filename").textContent=state.active;
+  byId("file-tab").textContent=state.active;
+  byId("ide-title").textContent=state.settings.appName;
+  document.dispatchEvent(new Event("pocket:fileloaded"));
+  window.dispatchEvent(new Event("pocket-render"));
 }
 function renderBuilds() {
   const wrapper=byId("builds");
   wrapper.replaceChildren();
+  const previews=byId("preview-results");
+  previews.replaceChildren();
   if (!state.builds.length) {
     wrapper.append(htmlEl("p","muted","Zatím žádná kompilace. První build spustíš tlačítkem Sestavit."));
     return;
@@ -68,6 +75,12 @@ function renderBuilds() {
     refresh.type="button";
     refresh.addEventListener("click",()=>void refreshBuild(item));
     actions.append(refresh);
+    if (item.stage==="success" && Number.isSafeInteger(item.previewArtifact) && Number.isSafeInteger(item.run_id)) {
+      const link=htmlEl("a","external",item.appName+" · Stáhnout snímek běhu #"+item.run_id);
+      link.href="https://github.com/"+encodeURI(item.repo)+"/actions/runs/"+item.run_id+"/artifacts/"+item.previewArtifact;
+      previews.append(link);
+      actions.append(link.cloneNode(true));
+    }
     const archive = item.artifacts?.find?.(artifact =>
       artifact.name === "pocket-ios-app-" + item.request_id && !artifact.expired &&
       Number.isSafeInteger(artifact.id) && artifact.id > 0
@@ -146,15 +159,24 @@ async function connect() {
     button.textContent="Ověřit a připojit";
   }
 }
-async function submit() {
+async function submit(capturePreview = false) {
   if (busy) return;
   busy=true;
   byId("btn-build").disabled=true;
   try {
-    if (!api) throw Error("Nejdřív připoj GitHub token.");
+    if (!api) {
+      document.querySelector('[data-view="project"]').click();
+      const settings = byId("connect-token").closest("details");
+      if (settings) settings.open = true;
+      byId("connect-token").focus();
+      throw Error("Pro vzdálené sestavení nejdřív připoj GitHub.");
+    }
     saveEditing();syncSettings();validateProject(state.project);
     if (state.settings.repo!==api.repo) throw Error("Repozitář se změnil, znovu se připoj.");
+    if (!confirm((capturePreview ? "Spustit projekt v simulátoru a uložit snímek obrazovky? " : "") + "Odeslat zdrojové soubory do " + api.repo + " a spustit sestavení na GitHubu? U veřejného repozitáře budou soubory veřejné.")) return;
     const req=makeRequest(state.settings,state.project);
+    if (capturePreview) req.capturePreview=true;
+    document.querySelector('[data-view="console"]').click();
     state.builds.unshift(req);state.builds=state.builds.slice(0,30);persist();renderBuilds();
     note("Ukládám neměnný snímek projektu do GitHubu...");
     try {
@@ -194,6 +216,9 @@ async function refreshBuild(item) {
     }
     const artifacts=await api.artifacts(run.id);
     const result=reconcileArtifacts(artifacts,item,run);
+    const previewName="pocket-ios-preview-"+item.request_id+"-"+item.source_sha;
+    const previews=artifacts.filter(a=>a.name===previewName && !a.expired && Number.isSafeInteger(a.id) && (!a.workflow_run || a.workflow_run.id===run.id));
+    item.previewArtifact=result.state==="success" && previews.length===1 ? previews[0].id : null;
     item.stage=result.state;item.artifacts=result.artifacts;
     item.message=result.state==="success"?
       "Ověřeny metadata běhu, UUID, SHA a názvy artefaktů. Výstup je NEPODEPSANÝ; instalace vyžaduje podpis.":
@@ -215,7 +240,11 @@ async function refreshAll() {
 function exportProject() {
   try{
     saveEditing();validateProject(state.project);
-    const url=URL.createObjectURL(new Blob([JSON.stringify(state.project,null,2)],{type:"application/json"}));
+    if (window.webkit?.messageHandlers?.exportProject) {
+      window.webkit.messageHandlers.exportProject.postMessage(JSON.stringify(state.project));
+      return;
+    }
+    const url=URL.createObjectURL(new Blob([JSON.stringify(state.project)],{type:"application/json"}));
     const a=htmlEl("a");a.href=url;a.download="xcode-pocket-project.json";a.click();
     setTimeout(()=>URL.revokeObjectURL(url),1000);note("Projekt exportován.","success");
   }catch(err){note(errorMessage(err),"error");}
@@ -265,6 +294,22 @@ function init() {
     byId("toggle-token").setAttribute("aria-pressed",String(visible));
     field.focus();
   });
+  byId("simulate").addEventListener("click",()=>void submit(true));
+  let previewURL;
+  byId("preview-file").addEventListener("change",async event=>{
+    const file=event.target.files[0];
+    if (!file) return;
+    const sig=new Uint8Array(await file.slice(0,8).arrayBuffer());
+    if (file.size > 20*1024*1024 || sig.join()!=="137,80,78,71,13,10,26,10") {
+      alert("Vyber PNG do 20 MiB.");
+      return;
+    }
+    if (previewURL) URL.revokeObjectURL(previewURL);
+    previewURL=URL.createObjectURL(file);
+    byId("preview-image").src=previewURL;
+    byId("preview-caption").textContent="Snímek ze Souborů · "+file.name;
+    byId("preview-figure").hidden=false;
+  });
   byId("btn-build").addEventListener("click",()=>void submit());
   byId("btn-refresh").addEventListener("click",()=>void refreshAll());
   byId("btn-add").addEventListener("click",addFile);
@@ -279,7 +324,34 @@ function init() {
   });
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)void refreshAll();});
   setInterval(()=>{if (!document.hidden)void refreshAll();},12000);
-  if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  if(location.protocol !== "file:" && "serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
   note("Lokální editor připraven. GitHub token není uložený na zařízení.");
 }
+window.pocketIDE = {
+  getProject: () => state.project,
+  getActive: () => state.active,
+  save: saveEditing,
+  openFile(path) {
+    if (!Object.hasOwn(state.project.files, path)) return;
+    saveEditing();
+    state.active=path;
+    persist();
+    renderFiles();
+  },
+  setProject(project) {
+    validateProject(project);
+    state.project=project;
+    persist();
+    renderFiles();
+  },
+  review() {
+    try {
+      saveEditing();
+      validateProject(state.project);
+      const paths=Object.keys(state.project.files);
+      const tests=paths.filter(path => path.startsWith("Tests/") && path.endsWith(".swift"));
+      note("Struktura projektu je platná. Souborů: " + paths.length + ". Testovacích zdrojů: " + tests.length + ". Kompilace a XCTest proběhnou až při sestavení.", "success");
+    } catch (error) { note(errorMessage(error), "error"); }
+  }
+};
 init();

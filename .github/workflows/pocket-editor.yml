@@ -10,7 +10,20 @@ on:
 permissions:
   contents: read
 jobs:
+  interface:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --prefix "$RUNNER_TEMP/smoke" playwright@1.56.1 --ignore-scripts
+      - run: CHROMIUM_PATH="$(command -v google-chrome)" NODE_PATH="$RUNNER_TEMP/smoke/node_modules" node --test tests/zip-workspace.test.mjs
+      - run: python3 pocket-editor/bundle.py web "$RUNNER_TEMP/editor.html"
+      - run: NODE_PATH="$RUNNER_TEMP/smoke/node_modules" node tests/editor-release-smoke.cjs "$RUNNER_TEMP/editor.html"
   editor:
+    needs: interface
     runs-on: macos-26
     timeout-minutes: 15
     steps:
@@ -37,6 +50,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "pocket-editor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" Xcode-Pocket-Editor.ipa \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
-            --title "Xcode Pocket Editor · build $GITHUB_RUN_NUMBER" \
-            --notes 'Editor Swift projektů pro iPhone. Soubor IPA podepíše a nainstaluje SideStore.'
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title "Xcode Pocket Editor 0.2.0 · build $GITHUB_RUN_NUMBER" \
+            --notes 'Mobilní IDE pro iPhone: navigátor projektu, Swift editor, paleta příkazů a konzole vzdáleného sestavení. IPA pro instalaci přes SideStore.'

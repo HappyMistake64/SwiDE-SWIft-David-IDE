@@ -13,28 +13,147 @@ export function newProject() {
 }
 
 export function validPath(name) {
-  return typeof name === "string" && !!name && name.length <= 240 && name === name.normalize("NFC") &&
+  return typeof name === "string" && !!name && name.length <= 480 && [...name].length <= 240 && name === name.normalize("NFC") &&
     !/[\\\u0000-\u001f\u007f]/.test(name) && name.split("/").every(p =>
       !!p && p === p.trim() && ![".", "..", "__proto__", "constructor", "prototype"].includes(p));
 }
 
+const IMAGE_EXTENSIONS = new Map([
+  ["image/png", [".png"]], ["image/jpeg", [".jpg", ".jpeg"]],
+  ["image/gif", [".gif"]], ["image/webp", [".webp"]]
+]);
+const CATALOG = "Resources/Assets.xcassets/";
+const projectMap = value => value !== null && typeof value === "object" && !Array.isArray(value);
+const pathKey = name => name.toUpperCase().toLowerCase().normalize("NFC");
+
+function checkImage(name, entry) {
+  if (!projectMap(entry) || Object.keys(entry).length !== 2 ||
+      !Object.hasOwn(entry, "mime") || !Object.hasOwn(entry, "base64") ||
+      !name.startsWith("Resources/") ||
+      !IMAGE_EXTENSIONS.get(entry.mime)?.some(extension => name.toLowerCase().endsWith(extension))) {
+    throw Error("Cesta, přípona a MIME obrázku nesouhlasí: " + name);
+  }
+  const encoded = entry.base64;
+  if (typeof encoded !== "string" || !encoded || encoded.length % 4) throw Error("Neplatné base64: " + name);
+  let bytes;
+  try { bytes = atob(encoded); } catch { throw Error("Neplatné base64: " + name); }
+  if (btoa(bytes) !== encoded) throw Error("Neplatné base64: " + name);
+  let valid;
+  switch (entry.mime) {
+    case "image/png":
+      valid = bytes.length >= 24 && bytes.startsWith("\x89PNG\r\n\x1a\n") && bytes.slice(12,16) === "IHDR"; break;
+    case "image/jpeg":
+      valid = bytes.length >= 4 && bytes.startsWith("\xff\xd8\xff") && bytes.endsWith("\xff\xd9"); break;
+    case "image/gif":
+      valid = bytes.length >= 13 && /^GIF8[79]a/.test(bytes); break;
+    case "image/webp":
+      valid = bytes.length >= 16 && bytes.startsWith("RIFF") && bytes.slice(8,12) === "WEBP"; break;
+  }
+  if (!valid) throw Error("Obsah obrázku neodpovídá formátu: " + name);
+}
+
+function catalogMetadata(files, path) {
+  const text = files[path];
+  let value;
+  try { value = JSON.parse(text); } catch { throw Error("Chybí nebo je neplatný " + path); }
+  // JSON.parse keeps the last duplicate. The native generator rejects duplicate keys.
+  const objects = [];
+  for (const match of text.matchAll(/"(?:\\.|[^"\\])*"|[{}]/g)) {
+    if (match[0] === "{") objects.push(new Set());
+    else if (match[0] === "}") objects.pop();
+    else if (/^\s*:/.test(text.slice(match.index + match[0].length))) {
+      const key = JSON.parse(match[0]), keys = objects[objects.length - 1];
+      if (keys.has(key)) throw Error("Duplicitní klíč v " + path);
+      keys.add(key);
+    }
+  }
+  if (!projectMap(value) || !projectMap(value.info) || value.info.version !== 1 ||
+      Object.keys(value.info).some(key => !["version", "author"].includes(key)) ||
+      ("author" in value.info && typeof value.info.author !== "string")) throw Error("Neplatná metadata: " + path);
+  return value;
+}
+
+function checkCatalog(files, binaries) {
+  const assets = [...Object.keys(files), ...Object.keys(binaries)].filter(path =>
+    path.split("/").some(part => part.toLowerCase().endsWith(".xcassets")));
+  if (!assets.length) return;
+  const root = CATALOG + "Contents.json";
+  if (Object.keys(catalogMetadata(files, root)).length !== 1) throw Error("Neplatný katalog: " + root);
+  const accepted = new Set([root]), sets = new Set();
+  for (const path of assets) {
+    if (path === root) continue;
+    const parts = path.slice(CATALOG.length).split("/");
+    if (!path.startsWith(CATALOG) || parts.length !== 2 ||
+        !/^[A-Za-z_][A-Za-z0-9_-]{0,79}\.imageset$/.test(parts[0])) throw Error("Nepodporovaná cesta v katalogu: " + path);
+    sets.add(parts[0]);
+  }
+  for (const set of sets) {
+    const folder = CATALOG + set + "/", metadata = folder + "Contents.json";
+    const value = catalogMetadata(files, metadata);
+    if (Object.keys(value).length !== 2 || !Array.isArray(value.images) ||
+        value.images.length < 1 || value.images.length > 3) throw Error("Neplatný imageset: " + set);
+    accepted.add(metadata);
+    const scales = new Set();
+    for (const entry of value.images) {
+      if (!projectMap(entry) || Object.keys(entry).length !== 3 || entry.idiom !== "universal" ||
+          !["1x", "2x", "3x"].includes(entry.scale) || scales.has(entry.scale) ||
+          typeof entry.filename !== "string" || !validPath(entry.filename) || entry.filename.includes("/")) {
+        throw Error("Neplatný odkaz v imagesetu: " + set);
+      }
+      const path = folder + entry.filename;
+      if (accepted.has(path) || !["image/png", "image/jpeg"].includes(binaries[path]?.mime)) {
+        throw Error("Chybějící nebo duplicitní obrázek: " + path);
+      }
+      accepted.add(path); scales.add(entry.scale);
+    }
+  }
+  if (accepted.size !== assets.length) throw Error("Katalog obsahuje nepoužité soubory.");
+}
+
 export function validateProject(p) {
-  if (!p || p.format !== "xcode-pocket-project" || ![1, 2].includes(p.version) ||
-      !p.files || Array.isArray(p.files) || typeof p.files !== "object") throw Error("Neplatný projekt.");
-  const files = Object.entries(p.files);
-  if (files.length < 1 || files.length > 200) throw Error("Projekt musí mít 1–200 souborů.");
-  const names = new Set();
-  for (const [name, body] of files) {
-    if (!validPath(name) || typeof body !== "string" || names.has(name.toLowerCase())) throw Error("Neplatný soubor: " + name);
-    names.add(name.toLowerCase());
-    if (name.startsWith("Resources/") && !/\.(json|txt|csv|plist|xml|md|html|css|js)$/i.test(name)) throw Error("Nepodporovaný Resource: " + name);
+  if (!p || p.format !== "xcode-pocket-project" || ![1, 2, 3].includes(p.version) ||
+      !projectMap(p.files) || ("binaries" in p && (p.version !== 3 || !projectMap(p.binaries)))) {
+    throw Error("Neplatný projekt.");
   }
-  for (const key of names) {
-    const bits = key.split("/");
-    for (let i = 1; i < bits.length; i++) if (names.has(bits.slice(0,i).join("/"))) throw Error("Konflikt soubor/složka.");
-  }
-  if (!files.some(([name]) => name.endsWith(".swift") && !name.startsWith("Tests/"))) throw Error("Chybí hlavní Swift soubor.");
   if (new TextEncoder().encode(JSON.stringify(p)).length > 4_000_000) throw Error("Projekt je větší než 4 MB.");
+  const binaries = p.binaries || {};
+  const names = [...Object.keys(p.files), ...Object.keys(binaries)];
+  if (!names.length || names.length > 200) throw Error("Projekt musí mít 1–200 souborů.");
+  const dirs = "dirs" in p ? p.dirs : [];
+  if (!Array.isArray(dirs) || dirs.length > 400) throw Error("Neplatný seznam složek.");
+  const files = new Set(), prefixes = new Map();
+  function register(name, directory) {
+    if (!validPath(name)) throw Error("Neplatná cesta souboru nebo složky: " + name);
+    let path = "";
+    for (const part of name.split("/")) {
+      path += (path ? "/" : "") + part;
+      const key = pathKey(path);
+      if (prefixes.has(key) && prefixes.get(key) !== path) throw Error("Konflikt názvů souborů nebo složek: " + path);
+      if (files.has(key) || (!directory && path === name && prefixes.has(key))) throw Error("Konflikt soubor/složka: " + path);
+      prefixes.set(key, path);
+    }
+    if (!directory) files.add(pathKey(name));
+  }
+  names.forEach(name => register(name, false));
+  dirs.forEach(name => register(name, true));
+  const swiftNames = new Set();
+  let mainSwift = false;
+  for (const [name, body] of Object.entries(p.files)) {
+    if (typeof body !== "string") throw Error("Neplatný obsah souboru: " + name);
+    if (name.startsWith("Resources/") && (!/\.(json|txt|csv|plist|xml|md|html|css|js)$/i.test(name) || body.includes("\0"))) {
+      throw Error("Nepodporovaný textový Resource: " + name);
+    }
+    if (name.endsWith(".swift")) {
+      const isTest = name.startsWith("Tests/");
+      const key = (isTest ? "test:" : "app:") + pathKey(name.split("/").pop());
+      if (swiftNames.has(key)) throw Error("Duplicitní název Swift souboru: " + name);
+      swiftNames.add(key);
+      if (!isTest) mainSwift = true;
+    }
+  }
+  if (!mainSwift) throw Error("Chybí hlavní Swift soubor.");
+  for (const [name, entry] of Object.entries(binaries)) checkImage(name, entry);
+  checkCatalog(p.files, binaries);
   return p;
 }
 
@@ -139,7 +258,8 @@ export class GithubAPI {
     if (r.repo!==this.repo) throw Error("Repozitář nesouhlasí.");
     return this.request("POST","/actions/workflows/pocket-ios.yml/dispatches",{
       ref:"main",inputs:{source_sha:r.source_sha,request_id:r.request_id,
-        project_path:r.project_path,app_name:r.appName,bundle_id:r.bundleId}});
+        project_path:r.project_path,app_name:r.appName,bundle_id:r.bundleId,
+        ...(r.capturePreview ? {capture_preview:"true"} : {})}});
   }
   async getRun(id){return this.request("GET","/actions/runs/"+Number(id));}
   async findRun(r) {

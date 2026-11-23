@@ -185,3 +185,71 @@ test("default fetch retains the browser global as its receiver", async t => {
   assert.equal(repository.full_name, REPOSITORY);
   assert.equal(fetchMock.mock.callCount(), 1);
 });
+
+function resourceProject() {
+  const root = "Resources/Assets.xcassets";
+  const folder = root + "/Mark.imageset";
+  const info = {version: 1, author: "xcode"};
+  const project = {...newProject(), version: 3, dirs: ["Drafts", folder]};
+  project.files[root + "/Contents.json"] = JSON.stringify({info});
+  project.files[folder + "/Contents.json"] = JSON.stringify({images: [
+    {idiom: "universal", filename: "mark.png", scale: "1x"}
+  ], info});
+  const png = {mime: "image/png", base64: btoa("\x89PNG\r\n\x1a\n" + "\x00".repeat(4) + "IHDR" + "\x00".repeat(8))};
+  project.binaries = {[folder + "/mark.png"]: png};
+  return project;
+}
+
+test("v3 resources, directories and edited Swift survive local restore and build snapshot", async () => {
+  const project = resourceProject();
+  const {project: restored} = restoreState(JSON.stringify({project}));
+  assert.deepEqual(restored, project);
+  restored.files["ContentView.swift"] += "\n// updated";
+  const api = new GithubAPI("test", REPOSITORY, async (_, opts) => {
+    const bytes = Buffer.from(JSON.parse(opts.body).content, "base64");
+    assert.deepEqual(JSON.parse(bytes.toString()), restored);
+    return {ok:true,status:201,json:async()=>({commit:{sha:SHA_A}})};
+  });
+  assert.equal(await api.snapshot(identity(),restored), SHA_A);
+});
+
+test("rejects malformed assets and conflicting paths before dispatch", () => {
+  const folder = "Resources/Assets.xcassets/Mark.imageset/";
+  const metadata = folder + "Contents.json", image = folder + "mark.png";
+  for (const mutate of [
+    p => { p.version = 2; },
+    p => { p.binaries[image].base64 = "QUJD"; },
+    p => { p.binaries[image].base64 += " "; },
+    p => { p.binaries[image].mime = "image/jpeg"; },
+    p => { p.binaries[image].extra = true; },
+    p => { p.files[image] = "text"; },
+    p => { p.dirs.push("resources/Other"); },
+    p => { p.dirs.push(image + "/Nested"); },
+    p => { p.files["Sub/ContentView.swift"] = ""; },
+    p => { p.files[metadata] = p.files[metadata].replace("mark.png", "absent.png"); },
+    p => { p.files[metadata] = p.files[metadata].replace('"info":', '"info":{}, "info":'); },
+    p => { p.binaries[folder + "extra.png"] = p.binaries[image]; },
+    p => { p.files["Resources/data.txt"] = "a\x00b"; },
+    p => { p.dirs = Array(401).fill("Drafts"); },
+    p => { for (let i=0; i<200; i++) p.files["Notes/" + i] = ""; }
+  ]) {
+    const project = resourceProject();
+    mutate(project);
+    assert.throws(() => validateProject(project));
+  }
+});
+
+test("plain v1/v2 text and v3 non-catalog images remain supported", () => {
+  for (const version of [1,2]) {
+    const p = {...newProject(), version, dirs:["Resources"]};
+    p.files["Resources/ceny.csv"] = "číslo,cena";
+    assert.equal(validateProject(p),p);
+  }
+  const project = {...newProject(), version:3, binaries:{}};
+  for (const [name, mime, bytes] of [
+    ["camera.jpg","image/jpeg","\xff\xd8\xff\xd9"],
+    ["icon.gif","image/gif","GIF89a" + "\0".repeat(7)],
+    ["thumb.webp","image/webp","RIFF0000WEBP0000"]
+  ]) project.binaries["Resources/" + name] = {mime, base64:btoa(bytes)};
+  assert.equal(validateProject(project),project);
+});

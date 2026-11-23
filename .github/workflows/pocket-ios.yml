@@ -28,6 +28,11 @@ on:
         required: true
         default: cz.davidvolf.pocketapp
         type: string
+      capture_preview:
+        description: Launch the generated project on a remote iPhone simulator and capture one screenshot
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -40,7 +45,7 @@ jobs:
   build:
     name: Compile unsigned iOS app
     runs-on: macos-26
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.capture_preview && 35 || 15 }}
     defaults:
       run:
         shell: bash
@@ -201,6 +206,24 @@ jobs:
             artifacts/PocketApp-unsigned.ipa
             artifacts/README.txt
             artifacts/build-identity.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Launch generated project and capture simulator preview
+        if: ${{ inputs.capture_preview }}
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+        run: |
+          set -o pipefail
+          bash native-build/simulator_preview.sh 2>&1 | tee artifacts/simulator-preview.log
+
+      - name: Save simulator screenshot
+        if: ${{ success() && inputs.capture_preview }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pocket-ios-preview-${{ inputs.request_id }}-${{ inputs.source_sha }}
+          path: artifacts/preview/screenshot.png
           if-no-files-found: error
           retention-days: 7
 

@@ -4,7 +4,15 @@ Created by David Volf.
 
 Mobilní vývojové prostředí pro tvorbu Swift/SwiftUI aplikací z iPhonu s kompilací přes GitHub Actions na vzdáleném Macu.
 
-Stav: prototyp. Kompilace ukázkové nativní aplikace je ověřená; podpis a instalace pouze z telefonu nejsou dokončené. Projekt není port Apple Xcode ani produkt společnosti Apple.
+## Mobilní IDE 0.2.0
+
+[Stáhnout editor pro SideStore](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/Xcode-Pocket-Editor.ipa)
+
+Editor otevírá naposledy upravovaný Swift soubor. Navigátor, hledání v projektu, paleta příkazů, lexikální zvýraznění, seznam symbolů, historie úprav a lokální kontrolní bod fungují na zařízení. Nastavení GitHubu je v panelu Projekt. JSON projektu může obsahovat podporované obrázky a složky schématu v3.
+
+Původní ZIP projekt má vlastní pracovní prostor v panelu Projekt. Můžeš upravovat text, exportovat původní nebo upravený archiv a zachovat binární prostředky. Tlačítko Sestavit pracuje s Pocket projektem; kompilace původního Xcode projektu má samostatný workflow.
+
+V panelu Náhled můžeš výslovně požádat o vzdálené spuštění Pocket projektu v simulátoru a pořízení jednoho PNG. Snímek výsledného běhu stáhni, rozbal a otevři ze Souborů. Živá relace simulátoru, SourceKit a LLDB zůstávají dalšími etapami. Skutečnou instalaci editoru verze 0.1 už autor ověřil přes SideStore. Níže následují původní poznámky k prototypu.
 
 Webový editor · GitHub Actions · Ověřený úspěšný build
 

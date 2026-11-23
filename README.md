@@ -153,7 +153,9 @@ Autor a licence
 
 Created by David Volf — HappyMistake64.
 
-Licence projektu zatím nebyla zvolena. Veřejná dostupnost repozitáře sama nepředstavuje udělení open-source licence. Xcode je označení produktu společnosti Apple; tento nezávislý projekt není společností Apple podporován.
+© 2026 David Volf. Všechna práva vyhrazena. [Oznámení o autorských právech](LICENSE)
+
+Xcode je ochranná známka společnosti Apple Inc. Xcode Pocket je nezávislý projekt.
 
 English overview
 

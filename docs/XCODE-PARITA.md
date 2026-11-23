@@ -16,3 +16,14 @@ Srovnání vychází z katalogu dodaného archivu Xcode 27.2, mobilní IPA 0.2.0
 | Další prostředí a nástroje | Zaměření na iPhone a vzdálený macOS | Stejný rozsah platforem | Instruments, GPU profiler, sanitizéry s interaktivním zobrazením, další Apple platformy, úplné katalogy šablon, integrovaní AI agenti a kompletní offline dokumentace |
 
 CI rozlišuje sestavení editoru, původní Xcode projekt, ověření SourceKit a záznam ze simulátoru. Pro přejímku na fyzickém telefonu je třeba projít odpovídající funkci s reálným projektem a účtem. Výstupy z GitHubu se vztahují ke konkrétnímu snímku a běhu.
+
+### Ověření vydané verze 0.3.2
+
+| Kontrola | Naměřený výsledek |
+|---|---|
+| [Vydání IPA, build 7](https://github.com/HappyMistake64/Xcode-for-iphone/actions/runs/45176731510) | Rozhraní prošlo testem na šířce iPhonu včetně otevření souboru na zadaném řádku. Stažený balíček obsahuje editor s identifikátorem cz.vozentiq.xcodepocket.editor. |
+| [Nativní WebKit](https://github.com/HappyMistake64/Xcode-for-iphone/actions/runs/45176731304) | Simulátor iPhonu s iOS 18.7 načetl přibalený editor, zachoval změnu po přepnutí souboru a provedl ověření tokenu přes nativní fetch se syntetickou odpovědí GitHubu. |
+| [Původní projekt](https://github.com/HappyMistake64/Xcode-for-iphone/actions/runs/45175319727) | Upravený soubor z testovacího ZIPu prošel uložením snímku a kompilací původního projektu pro iPhone. Kontrola ověřila platformu spustitelného souboru a obsah IPA. |
+| [SourceKit-LSP](https://github.com/HappyMistake64/Xcode-for-iphone/actions/runs/45177652783) | S iPhoneOS SDK vrátil jazykový server polohu lokální definice a nabídl deklarovanou vlastnost při doplňování členu typu. |
+| [XCTest a pokrytí](https://github.com/HappyMistake64/Xcode-for-iphone/actions/runs/45175870057) | Jeden test prošel. Produkční report naměřil 9 z 10 spustitelných řádků ukázkové aplikace, z toho 5 ze 6 v Pricing/Price.swift. |
+| [Simulátor a LLDB](https://github.com/HappyMistake64/Xcode-for-iphone/actions/runs/45176148639) | Vznikly odlišné světlé a tmavé snímky. Debugger při druhém spuštění zastavil na PocketApp.swift:7 a přečetl lokální proměnnou pocketMarker s hodnotou 4817. |

@@ -175,3 +175,13 @@ test("HTTP errors do not pretend the dispatch succeeded",async()=>{
   const api=new GithubAPI("mock",REPOSITORY,async()=>({ok:false,status:403,text:async()=>"Missing Actions permission"}));
   await assert.rejects(api.dispatch(identity()),/403/);
 });
+
+test("default fetch retains the browser global as its receiver", async t => {
+  const fetchMock = t.mock.method(globalThis, "fetch", async function () {
+    assert.equal(this, globalThis);
+    return {ok:true, status:200, json:async () => ({full_name:REPOSITORY})};
+  });
+  const repository = await new GithubAPI("test-token").check();
+  assert.equal(repository.full_name, REPOSITORY);
+  assert.equal(fetchMock.mock.callCount(), 1);
+});

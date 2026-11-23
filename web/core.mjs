@@ -104,7 +104,7 @@ export function reconcileArtifacts(artifacts,r,run) {
 }
 
 export class GithubAPI {
-  constructor(token,repo=REPOSITORY,fetcher=fetch) {
+  constructor(token,repo=REPOSITORY,fetcher=globalThis.fetch.bind(globalThis)) {
     if (!token || !token.trim()) throw Error("Vlož GitHub token (Contents a Actions).");
     this.token=token.trim(); this.repo=validateSettings({repo}).repo; this.fetcher=fetcher;
   }

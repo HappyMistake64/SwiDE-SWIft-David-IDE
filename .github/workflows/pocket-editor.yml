@@ -52,5 +52,5 @@ jobs:
         run: |
           gh release create "pocket-editor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" Xcode-Pocket-Editor.ipa \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
-            --title "Xcode Pocket Editor 0.3.1 · build $GITHUB_RUN_NUMBER" \
+            --title "Xcode Pocket Editor 0.3.2 · build $GITHUB_RUN_NUMBER" \
             --notes 'Podporované původní ZIP projekty, diagnostiky a testy, změny souborů, SourceKit a jednorázové ladění na vzdáleném Macu. IPA pro instalaci přes SideStore.'

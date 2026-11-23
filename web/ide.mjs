@@ -7,6 +7,7 @@
   const panelKey = "pocket-ide-panel-v1";
   const folded = new Set();
   let paletteIndex = 0;
+  let paletteMode = "commands";
   let paletteCommands = [];
   const dialog = id("command-dialog");
 
@@ -237,6 +238,7 @@
     "debug-report":["Zobrazit zásobník a proměnné LLDB",()=>revealTool("debug-report")],
     "issues":["Diagnostika kompilátoru a výsledky testů",()=>revealTool("issues")],
     "original":["Otevřít nebo sestavit původní ZIP projekt",()=>revealTool("zip-workspace")],
+    "open-quickly":["Rychle otevřít soubor podle názvu nebo cesty", () => invokePalette("files")],
     "project-search":["Hledat v projektu", () => focusControl("project-search")],
     "find":["Hledat v souboru", () => focusControl("find-text")],
     "find-next":["Najít další výskyt", () => find()],
@@ -278,7 +280,12 @@
     if (typeof dialog.close === "function" && dialog.open) dialog.close();
     else { dialog.removeAttribute("open"); dialog.hidden = true; }
   }
-  function invokePalette() {
+  function invokePalette(mode = "commands") {
+    paletteMode = mode;
+    const files = mode === "files";
+    id("palette-title").textContent = files ? "Rychle otevřít" : "Paleta příkazů";
+    id("query-label").textContent = files ? "Soubor nebo cesta" : "Najít příkaz";
+    id("command-query").placeholder = files ? "ContentView.swift nebo ContentView.swift:12" : "Napiš název příkazu";
     dialog.hidden = false;
     if (typeof dialog.showModal === "function") { if (!dialog.open) dialog.showModal(); }
     else dialog.setAttribute("open", "");
@@ -287,12 +294,38 @@
   function renderPalette() {
     const field = id("command-query");
     const query = field.value.trim().toLocaleLowerCase();
-    paletteCommands = Object.keys(definitions).filter(key => (definitions[key][0] + " " + key).toLocaleLowerCase().includes(query));
+    if (paletteMode === "files") {
+      const all = api().getProject().files;
+      const lineQuery = !Object.hasOwn(all, field.value.trim()) && /^(.*):([1-9][0-9]{0,5})$/.exec(query);
+      const needle = lineQuery ? lineQuery[1] : query;
+      const rank = path => {
+        const name = path.split("/").pop().toLocaleLowerCase();
+        if (name === needle) return 0;
+        if (name.startsWith(needle)) return 1;
+        return name.includes(needle) ? 2 : 3;
+      };
+      paletteCommands = Object.keys(all).filter(path => path.toLocaleLowerCase().includes(needle))
+        .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b)).map(path => ({
+          label: path,
+          action: () => {
+            if (!lineQuery) {open(path); editor.focus(); return;}
+            const lines = api().getProject().files[path].split("\n");
+            const row = Number(lineQuery[2]);
+            if (row > lines.length) {open(path); report("Soubor má pouze " + lines.length + " řádků.", true); return;}
+            const offset = row > 1 ? lines.slice(0, row - 1).join("\n").length + 1 : 0;
+            open(path, offset, offset);
+          }
+        }));
+    } else {
+      paletteCommands = Object.keys(definitions)
+        .filter(key => (definitions[key][0] + " " + key).toLocaleLowerCase().includes(query))
+        .map(key => ({label:definitions[key][0], action:() => run(key)}));
+    }
     paletteIndex = 0;
     const list = id("command-list");
     field.setAttribute("aria-controls", list.id);
-    list.replaceChildren(...paletteCommands.map(key => button(definitions[key][0], () => {closePalette(); run(key);}, "command-item")));
-    if (!paletteCommands.length) list.textContent = "Žádné odpovídající příkazy.";
+    list.replaceChildren(...paletteCommands.map(command => button(command.label, () => {closePalette(); command.action();}, "command-item")));
+    if (!paletteCommands.length) list.textContent = paletteMode === "files" ? "Žádné odpovídající soubory." : "Žádné odpovídající příkazy.";
     highlightPalette();
   }
   function highlightPalette() {
@@ -315,7 +348,7 @@
   id("command-query").addEventListener("input", renderPalette);
   id("command-query").addEventListener("keydown", e => {
     if (!paletteCommands.length) return;
-    if (e.key === "Enter") { e.preventDefault(); closePalette(); run(paletteCommands[paletteIndex]); }
+    if (e.key === "Enter") { e.preventDefault(); closePalette(); paletteCommands[paletteIndex].action(); }
     else if (["ArrowDown","ArrowUp"].includes(e.key)) {
       e.preventDefault();
       paletteIndex = (paletteIndex + (e.key === "ArrowDown" ? 1 : -1) + paletteCommands.length) % paletteCommands.length;
@@ -326,6 +359,7 @@
   document.addEventListener("keydown", e => {
     const mod = e.metaKey || e.ctrlKey;
     if (mod && (e.key.toLowerCase() === "k" || (e.shiftKey && e.key.toLowerCase() === "p"))) { e.preventDefault(); invokePalette(); }
+    else if (mod && e.shiftKey && e.key.toLowerCase() === "o") { e.preventDefault(); invokePalette("files"); }
     else if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); run(e.shiftKey ? "project-search" : "find"); }
     else if (mod && e.key.toLowerCase() === "l" && e.target === editor) { e.preventDefault(); run("goto-line"); }
     else if (e.key === "Escape" && dialog.open) { e.preventDefault(); closePalette(); }

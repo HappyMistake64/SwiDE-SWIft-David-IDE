@@ -29,8 +29,7 @@ export function selectedIdentifier(text, start, end) {
 }
 
 // Return completed multiline brace blocks, skipping nested comments and Swift string delimiters.
-export function foldableBlocks(text) {
-  const stack = [], ranges = new Map();
+function scanSwiftDelimiters(text, visit, conservative = false) {
   let pos = 0, row = 0, commentDepth = 0, closing = "", escape = "";
   while (pos < text.length) {
     const ch = text[pos];
@@ -43,7 +42,7 @@ export function foldableBlocks(text) {
     }
     if (closing) {
       if (text.startsWith(closing, pos)) { pos += closing.length; closing = ""; }
-      else if (text.startsWith(escape, pos)) { pos += escape.length; if (text[pos] !== "\n") pos++; }
+      else if (text.startsWith(escape, pos)) { pos += escape.length; if (conservative && text[pos] === "(") return false; if (text[pos] !== "\n") pos++; }
       else pos++;
       continue;
     }
@@ -63,14 +62,81 @@ export function foldableBlocks(text) {
       pos = Math.max(pos + 1, after);
       continue;
     }
+    // Slash can begin a Swift regex literal. A local scan cannot disambiguate it from an operator.
+    if (conservative && ch === "/") return false;
+    if ("{}[]()".includes(ch)) visit(ch,pos,row);
+    pos++;
+  }
+  return !commentDepth && !closing;
+}
+
+export function foldableBlocks(text) {
+  const stack = [], ranges = new Map();
+  scanSwiftDelimiters(text, (ch, pos, row) => {
     if (ch === "{") stack.push(row);
     if (ch === "}" && stack.length) {
       const start = stack.pop();
       if (row > start) ranges.set(start, Math.max(row, ranges.get(start) || 0));
     }
-    pos++;
-  }
+  });
   return ranges;
+}
+
+// Coordinates follow textarea.selectionStart/End (UTF-16 with normalized LF).
+export function editSourceCommand(command, text, start, end) {
+  const selection = text.slice(start, end);
+  const change = (from, to, insert, caret, limit = caret) => ({from, to, insert, start:caret, end:limit});
+  if (command === "balance") {
+    const pairs = {")":"(", "]":"[", "}":"{"}, stack = [];
+    let result, invalid = false;
+    const ok = scanSwiftDelimiters(text, (ch, pos) => {
+      if ("([{".includes(ch)) { stack.push({ch,pos}); return; }
+      const opener = stack.pop();
+      if (opener?.ch !== pairs[ch]) { invalid = true; return; }
+      if (!result && opener.pos <= start && end <= pos+1 && (opener.pos !== start || end !== pos+1)) {
+        result = {start:opener.pos, end:pos+1};
+      }
+    }, true);
+    return ok && !invalid && !stack.length ? result : undefined;
+  }
+  if (["upper","lower","capitalize"].includes(command)) {
+    if (!selection) return;
+    let converted;
+    if (command === "upper") converted = selection.toUpperCase();
+    else if (command === "lower") converted = selection.toLowerCase();
+    else converted = selection.replace(/[\p{L}][\p{L}\p{M}\p{N}]*/gu, word => {
+      const [initial, ...rest] = [...word];
+      return initial.toUpperCase() + rest.join("").toLowerCase();
+    });
+    if (converted !== selection) return change(start,end,converted,start,start+converted.length);
+    return;
+  }
+  if (!text.length) return;
+  if (selection && command === "duplicate") return change(end,end,selection,end,end+selection.length);
+  if (selection && command === "delete") return change(start,end,"",start);
+  const lineStart = offset => offset ? text.lastIndexOf("\n",offset-1)+1 : 0;
+  const lineEnd = offset => { const newline=text.indexOf("\n",offset); return newline<0 ? text.length : newline; };
+  const first = lineStart(start), last = lineEnd(end > start ? end-1 : end);
+  const lines = text.slice(first,last);
+  if (command === "duplicate") {
+    return change(last,last,"\n"+lines,start+lines.length+1);
+  }
+  if (command === "delete") {
+    if (last < text.length) return change(first,last+1,"",first);
+    const cut = Math.max(0,first-1);
+    return change(cut,last,"",cut);
+  }
+  if (command === "up") {
+    if (!first || (first === text.length && text.endsWith("\n"))) return;
+    const prev = lineStart(first-1), offset = first-prev;
+    const before = text.slice(prev,first-1);
+    return change(prev,last,lines+"\n"+before,start-offset,end-offset);
+  }
+  if (command === "down") {
+    if (last >= text.length-1) return;
+    const next = lineEnd(last+1), following = text.slice(last+1,next), offset = following.length+1;
+    return change(first,next,following+"\n"+lines,start+offset,Math.min(text.length,end+offset));
+  }
 }
 
 const snippets = {
@@ -143,6 +209,31 @@ export function mountEditorTools(root, api, editor) {
       else insert(pair, pair.length);
     });
   }
+  const sourceActions = element("div"); sourceActions.className = "inline-actions";
+  const sourceChoice = element("select"); sourceChoice.setAttribute("aria-label","Úprava zdrojového kódu");
+  for (const [key,label] of Object.entries({
+    up:"Posunout řádky nahoru", down:"Posunout řádky dolů", duplicate:"Duplikovat výběr nebo řádek",
+    delete:"Smazat výběr nebo řádek", upper:"Velká písmena", lower:"Malá písmena",
+    capitalize:"Velká počáteční písmena", balance:"Vybrat okolní závorky ve Swiftu"
+  })) sourceChoice.append(new Option(label,key));
+  sourceActions.append(sourceChoice);
+  button(sourceActions, "Provést úpravu", () => {
+    const command = sourceChoice.value;
+    if (command === "balance" && !api.getActive()?.endsWith(".swift")) {
+      status.textContent = "Výběr závorek je dostupný pro Swift."; return;
+    }
+    const edit = editSourceCommand(command,editor.value,editor.selectionStart,editor.selectionEnd);
+    if (!edit) { status.textContent = "V této pozici nelze příkaz použít."; return; }
+    const direction = editor.selectionDirection;
+    if (edit.insert !== undefined) {
+      editor.dispatchEvent(new Event("beforeinput",{bubbles:true}));
+      editor.setRangeText(edit.insert,edit.from,edit.to,"end");
+    }
+    editor.focus();
+    editor.setSelectionRange(edit.start,edit.end,direction);
+    if (edit.insert !== undefined) editor.dispatchEvent(new Event("input",{bubbles:true}));
+    status.textContent = "";
+  });
   const tools = element("div"); tools.className = "inline-actions";
   const choice = element("select"); choice.setAttribute("aria-label", "Úryvek kódu");
   for (const key of Object.keys(snippets)) choice.append(new Option(key, key));
@@ -214,7 +305,7 @@ export function mountEditorTools(root, api, editor) {
     if (details.open && folding.open) { cancelAnimationFrame(frame); frame = requestAnimationFrame(renderFolded); }
   });
   document.addEventListener("pocket:fileloaded", () => { folded.clear(); help.replaceChildren(); renderFolded(); });
-  body.append(touch, tools, help, folding, status);
+  body.append(touch, sourceActions, tools, help, folding, status);
 }
 
 if (typeof document !== "undefined") {

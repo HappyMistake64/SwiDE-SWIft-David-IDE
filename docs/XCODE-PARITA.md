@@ -1,10 +1,10 @@
-# Xcode Pocket 0.3.1 a Xcode pro Mac
+# Xcode Pocket 0.3.2 a Xcode pro Mac
 
-Srovnání vychází z katalogu dodaného archivu Xcode 27.2, mobilní IPA 0.2.0 a zdrojů verze 0.3.1. Inventář našel 1 154 deklarací příkazů, 194 čitelných manifestů rozšíření a 455 čitelných šablon. Statické deklarace samy neověřují chování příkazů. Tato tabulka porovnává uživatelské výsledky.
+Srovnání vychází z katalogu dodaného archivu Xcode 27.2, mobilní IPA 0.2.0 a zdrojů verze 0.3.2. Inventář našel 1 154 deklarací příkazů, 194 čitelných manifestů rozšíření a 455 čitelných šablon. Statické deklarace samy neověřují chování příkazů. Tato tabulka porovnává uživatelské výsledky. [Podrobná inventura](XCODE-PRIKAZY.md) mapuje všech 1 154 deklarací na zdrojové soubory a ovládání editoru.
 
-| Oblast Xcode | V 0.2.0 | V 0.3.1 | Zbývající rozdíl |
+| Oblast Xcode | V 0.2.0 | V 0.3.2 | Zbývající rozdíl |
 |---|---|---|---|
-| Navigátor a Swift editor | Strom, hledání, symboly, historie, kontrolní bod | Přesun a přejmenování souborů, úryvky, pohled se sbalenými bloky a lokální nápověda | Sémantické refaktoringy a kompletní sada příkazů SourceEditoru |
+| Navigátor a Swift editor | Strom, hledání, symboly, historie, kontrolní bod | Rychlé otevření souboru a řádku, přesun řádků, změna velikosti písmen, výběr párových závorek, přesun a přejmenování souborů, úryvky, pohled se sbalenými bloky a lokální nápověda | Sémantické refaktoringy a kompletní sada příkazů SourceEditoru |
 | Zdrojový projekt a schéma | ZIP šel upravit a exportovat | Ze ZIPu lze vybrat sdílené schéma .xcodeproj, výslovně schválit sestavení IPA nebo snímek ze simulátoru | Vlastní editor targetů, build phases, konfigurací, workspaces a správa SwiftPM závislostí |
 | Sestavení, testy a chyby | Sestavení iOS, XCTest na runneru, odkazy na logy | Strukturované diagnostiky a výsledky XCTest a pokrytí řádků po souborech, import protokolu s ověřením běhu a otevření odpovídajícího zdrojového řádku | Interaktivní správce testovacích plánů, zvýraznění pokrytí po řádcích a UI test recorder |
 | SourceKit | Lexikální zvýraznění a obrys deklarací | Jednorázový dotaz na definici či doplnění pro uložený snímek aplikačního targetu | Trvalá relace, návrhy při každém úhozu a indexace libovolného workspace |

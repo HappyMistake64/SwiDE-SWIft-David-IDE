@@ -68,6 +68,16 @@ function renderBuilds() {
     refresh.type="button";
     refresh.addEventListener("click",()=>void refreshBuild(item));
     actions.append(refresh);
+    const archive = item.artifacts?.find?.(artifact =>
+      artifact.name === "pocket-ios-app-" + item.request_id && !artifact.expired &&
+      Number.isSafeInteger(artifact.id) && artifact.id > 0
+    );
+    if (item.stage === "success" && archive && /^\d+$/.test(item.run_id)) {
+      const download = htmlEl("a", "secondary", "Stáhnout ZIP s IPA");
+      download.href = "https://github.com/" + encodeURI(item.repo) +
+        "/actions/runs/" + item.run_id + "/artifacts/" + archive.id;
+      actions.append(download);
+    }
     if (item.stage==="ambiguous" || item.stage==="mismatch") {
       const choose=htmlEl("button","secondary","Zadat Run ID");
       choose.type="button";

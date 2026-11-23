@@ -1,4 +1,4 @@
-# Bezpečnost Xcode Pocket
+# Bezpečnost SwiDe
 
 ## Soukromé hlášení
 

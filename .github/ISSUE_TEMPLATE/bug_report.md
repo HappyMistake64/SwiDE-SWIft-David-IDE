@@ -21,7 +21,7 @@ assignees: ""
 
 ### V jakém prostředí?
 
-<!-- Uveď verzi nebo build Xcode Pocket, zařízení, verzi iOS a zda šlo o Safari, webovou aplikaci z plochy nebo editor instalovaný přes SideStore. -->
+<!-- Uveď verzi nebo build SwiDe, zařízení, verzi iOS a zda šlo o Safari, webovou aplikaci z plochy nebo editor instalovaný přes SideStore. -->
 
 ### Volitelné podklady
 

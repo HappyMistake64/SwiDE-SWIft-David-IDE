@@ -10,7 +10,7 @@
 
 - (void)showError:(NSString *)message {
     if (self.presentedViewController) return;
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xcode Pocket"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"SwiDe"
         message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -69,7 +69,7 @@
         completionHandler();
         return;
     }
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xcode Pocket" message:message
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"SwiDe" message:message
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault
         handler:^(UIAlertAction *action) { completionHandler(); }]];
@@ -82,7 +82,7 @@
         completionHandler(NO);
         return;
     }
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xcode Pocket" message:message
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"SwiDe" message:message
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Zrušit" style:UIAlertActionStyleCancel
         handler:^(UIAlertAction *action) { completionHandler(NO); }]];
@@ -98,7 +98,7 @@
         completionHandler(nil);
         return;
     }
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Xcode Pocket" message:prompt
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"SwiDe" message:prompt
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
         field.text = defaultText;
@@ -128,7 +128,7 @@
             [self showError:@"Export vyžaduje platný JSON projektu do velikosti 4 MB."];
             return;
         }
-        filename = @"xcode-pocket-project.json";
+        filename = @"swide-project.json";
     } else if ([message.name isEqualToString:@"exportWorkspaceZip"]) {
         if (![message.body isKindOfClass:NSDictionary.class]) return;
         NSDictionary *payload = message.body;

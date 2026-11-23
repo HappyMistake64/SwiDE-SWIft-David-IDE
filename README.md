@@ -1,14 +1,14 @@
-Xcode Pocket — Xcode for iPhone
+# SwiDe — SWIft David’s IDE
 
 Created by David Volf.
 
 Mobilní vývojové prostředí pro tvorbu Swift/SwiftUI aplikací z iPhonu s kompilací přes GitHub Actions na vzdáleném Macu.
 
-## Mobilní IDE 0.4.0
+## Mobilní IDE
 
-[Stáhnout aktuální editor](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/Xcode-Pocket-Editor.ipa) · [Rozsah funkcí a rozdíly oproti Xcode](docs/XCODE-PARITA.md)
+[Stáhnout aktuální editor](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/SwiDe.ipa) · [Rozsah funkcí a rozdíly oproti Xcode](docs/XCODE-PARITA.md)
 
-V navigátoru **Soubory** přidáš tlačítkem **+** jednotlivé soubory z aplikace Soubory na iPhonu. U zdrojového kódu vyber UTF-8 soubor s příponou `.swift`. Můžeš vybrat více souborů najednou. Ve výchozím nastavení se Swift přidá do kořene Pocket projektu a podporované obrázky a datové soubory do `Resources/`. Pokud už některá cesta v projektu existuje, celý výběr se zastaví před zápisem. Pocket projekt pojme až 200 souborů v celkovém limitu 4 MB včetně zakódovaných prostředků. Pro původní projekt se zachováním uspořádání složek použij import ZIP.
+V navigátoru **Soubory** přidáš tlačítkem **+** jednotlivé soubory z aplikace Soubory na iPhonu. U zdrojového kódu vyber UTF-8 soubor s příponou `.swift`. Můžeš vybrat více souborů najednou. Ve výchozím nastavení se Swift přidá do kořene projektu ve SwiDe a podporované obrázky a datové soubory do `Resources/`. Pokud už některá cesta v projektu existuje, celý výběr se zastaví před zápisem. Projekt ve SwiDe pojme až 200 souborů v celkovém limitu 4 MB včetně zakódovaných prostředků. Pro původní projekt se zachováním uspořádání složek použij import ZIP.
 
 V paletě příkazů zvol **Rychle otevřít** a napiš například `ContentView.swift:12`. Nástroje editoru umí přesouvat řádky, měnit velikost písmen a vybírat párové závorky.
 
@@ -16,13 +16,13 @@ V panelu Projekt můžeš sestavit podporované původní ZIP projekty se sdíle
 
 ## Historie verze 0.2.0
 
-[Stáhnout editor pro SideStore](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/Xcode-Pocket-Editor.ipa)
+Starší vydání editoru byla publikována pod názvem Xcode Pocket. [Historie vydání](https://github.com/HappyMistake64/Xcode-for-iphone/releases)
 
 Editor otevírá naposledy upravovaný Swift soubor. Navigátor, hledání v projektu, paleta příkazů, lexikální zvýraznění, seznam symbolů, historie úprav a lokální kontrolní bod fungují na zařízení. Nastavení GitHubu je v panelu Projekt. JSON projektu může obsahovat podporované obrázky a složky schématu v3.
 
-Původní ZIP projekt má vlastní pracovní prostor v panelu Projekt. Můžeš upravovat text, exportovat původní nebo upravený archiv a zachovat binární prostředky. Tlačítko Sestavit pracuje s Pocket projektem; kompilace původního Xcode projektu má samostatný workflow.
+Původní ZIP projekt má vlastní pracovní prostor v panelu Projekt. Můžeš upravovat text, exportovat původní nebo upravený archiv a zachovat binární prostředky. Tlačítko Sestavit pracuje s projektem editoru; kompilace původního Xcode projektu má samostatný workflow.
 
-V panelu Náhled můžeš výslovně požádat o vzdálené spuštění Pocket projektu v simulátoru a pořízení jednoho PNG. Snímek výsledného běhu stáhni, rozbal a otevři ze Souborů. Živá relace simulátoru, SourceKit a LLDB zůstávají dalšími etapami. Skutečnou instalaci editoru verze 0.1 už autor ověřil přes SideStore. Níže následují původní poznámky k prototypu.
+V panelu Náhled můžeš výslovně požádat o vzdálené spuštění projektu editoru v simulátoru a pořízení jednoho PNG. Snímek výsledného běhu stáhni, rozbal a otevři ze Souborů. Živá relace simulátoru, SourceKit a LLDB zůstávají dalšími etapami. Skutečnou instalaci editoru verze 0.1 už autor ověřil přes SideStore. Níže následují původní poznámky k prototypu.
 
 Webový editor · GitHub Actions · Ověřený úspěšný build
 
@@ -155,8 +155,8 @@ Created by David Volf — HappyMistake64.
 
 © 2026 David Volf. Všechna práva vyhrazena. [Oznámení o autorských právech](LICENSE)
 
-Xcode je ochranná známka společnosti Apple Inc. Xcode Pocket je nezávislý projekt.
+Xcode je ochranná známka společnosti Apple Inc. SwiDe je nezávislý projekt Davida Volfa.
 
-English overview
+## English overview
 
-Xcode Pocket is an experimental iPhone-first SwiftUI editor and GitHub Actions macOS build backend. The repository now includes an independent mobile PWA editor in web/, exact build matching, and a tested unsigned .ipa alongside the .app.zip. GitHub Pages must still be enabled, the real iPhone browser flow tested, and a legitimate signing/install path provided. An unsigned IPA cannot be installed by itself. This project is not Apple Xcode.
+SwiDe is an iPhone-first Swift editor by David Volf. Edit files on the device and submit a snapshot to a GitHub Actions macOS runner to compile an iOS app. The editor is available as a web app and as an IPA for SideStore. [Open the web editor](https://happymistake64.github.io/Xcode-for-iphone/) · [Download SwiDe.ipa](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/SwiDe.ipa)

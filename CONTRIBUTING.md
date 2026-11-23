@@ -1,4 +1,4 @@
-# Jak přispět do Xcode Pocket
+# Jak přispět do SwiDe
 
 K hlášení chyby nebo návrhu na zlepšení ti stačí iPhone a účet na GitHubu. Nejdřív zkus najít existující issue podle chybové hlášky nebo názvu ovládacího prvku. Pokud popisuje stejný problém, přidej k němu své poznatky.
 

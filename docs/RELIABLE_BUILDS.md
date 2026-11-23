@@ -1,4 +1,4 @@
-# Xcode Pocket — reliable build identity (v1)
+# SwiDe — reliable build identity (v1)
 
 This contract addresses the "wrong GitHub Actions run was selected" error. It covers only the **Pocket iOS build** workflow; other workflows have separate artifacts and must not be treated as equivalent.
 

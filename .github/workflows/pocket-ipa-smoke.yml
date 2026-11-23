@@ -1,4 +1,4 @@
-name: Pocket unsigned IPA smoke
+name: SwiDe unsigned IPA smoke
 on:
   pull_request:
     paths:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a dependency-free Xcode project from an Xcode Pocket JSON export.
+"""Generate a dependency-free Xcode project from an SwiDe JSON export.
 
 The generated application target is always PocketApp; Tests/**/*.swift adds PocketAppTests. This generator does not compile or sign
 anything: run xcodebuild on macOS after it finishes. Nested .swift files and UTF-8 Resources/ files are supported.

@@ -1,4 +1,4 @@
-name: Pocket Original Simulator
+name: SwiDe Original Simulator
 run-name: Original Simulator ${{ inputs.request_id }} @ ${{ inputs.source_sha }}
 on:
   workflow_dispatch:

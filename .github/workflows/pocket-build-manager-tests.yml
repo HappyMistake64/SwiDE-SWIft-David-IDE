@@ -1,4 +1,4 @@
-name: Pocket Build Manager tests
+name: SwiDe Build Manager tests
 on:
   push:
     paths:

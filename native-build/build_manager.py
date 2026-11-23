@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve Xcode Pocket builds without ever guessing which run owns an artifact.
+"""Resolve SwiDe builds without ever guessing which run owns an artifact.
 
 Only read-only GitHub Actions REST API endpoints are used. The original request
 identity (UUID and full source commit SHA) must be retained by the caller.

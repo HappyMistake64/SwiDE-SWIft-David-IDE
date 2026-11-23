@@ -1,4 +1,4 @@
-# Jak spolu pracujeme na Xcode Pocket
+# Jak spolu pracujeme na SwiDe
 
 V issues, diskusích, pull requestech i při revizi kódu jsou vítaní také lidé, kteří začínají se Swiftem nebo mají k dispozici jen iPhone. Dotaz i odpověď mohou být česky nebo anglicky.
 

@@ -71,7 +71,7 @@ export async function submitOriginal({api,archive,choice,mode,approved,onRecord 
     {path:zipPath,mode:"100644",type:"blob",sha:blobSha},
     {path:"original-xcode/requests/"+id+".json",mode:"100644",type:"blob",content:JSON.stringify(manifest)}
   ]})).sha);
-  const commit = sha((await req("POST","/git/commits",{message:"Xcode Pocket original "+id,tree,parents:[head]})).sha);
+  const commit = sha((await req("POST","/git/commits",{message:"SwiDe original "+id,tree,parents:[head]})).sha);
   // A concurrent update causes a conflict; never force-push or dispatch an unpublished snapshot.
   const ref = await req("PATCH","/git/refs/heads/main",{sha:commit,force:false});
   requireValue(ref?.object?.sha === commit,"GitHub nepotvrdil uložení snapshotu do main.");

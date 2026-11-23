@@ -1,4 +1,4 @@
-name: Publish Xcode Pocket iPhone editor
+name: Publish SwiDe iPhone editor
 on:
   push:
     branches: [main]

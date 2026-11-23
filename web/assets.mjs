@@ -1,6 +1,6 @@
-// Create the universal image sets accepted by the Pocket project generator.
+// Create the universal image sets accepted by the SwiDe project generator.
 const catalog = "Resources/Assets.xcassets/";
-const info = {version:1, author:"Xcode Pocket"};
+const info = {version:1, author:"SwiDe"};
 export function addImage(project, name, mime, encoded) {
   if (!/^[A-Za-z_][A-Za-z0-9_-]{0,79}$/.test(name)) throw Error("Název musí začínat písmenem nebo podtržítkem a mít nejvýše 80 znaků.");
   const suffix = {"image/png":"png", "image/jpeg":"jpg"}[mime];
@@ -29,7 +29,7 @@ function mount() {
   picker.onchange=async()=>{
     const file=picker.files[0]; if (!file) return;
     try {
-      if (file.size > 3000000) throw Error("Obrázek překračuje limit Pocket projektu.");
+      if (file.size > 3000000) throw Error("Obrázek překračuje limit velikosti projektu.");
       const name=prompt("Název obrázku pro SwiftUI Image(…)",file.name.replace(/\.[^.]+$/,""));
       if (!name) return;
       const bytes=new Uint8Array(await file.arrayBuffer()); let raw="";

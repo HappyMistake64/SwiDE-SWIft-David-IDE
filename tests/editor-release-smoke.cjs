@@ -30,6 +30,8 @@ async function chooseSwiftFile(page, name, contents) {
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(pathToFileURL(process.argv[2]).href);
+    assert.equal(await page.title(), "SwiDe");
+    assert.equal(await page.locator('meta[name="apple-mobile-web-app-title"]').getAttribute("content"), "SwiDe");
     const code = page.locator("#code");
     const tree = page.locator("#tree");
     const projectTab = page.locator('[data-view="project"]:visible').first();
@@ -84,6 +86,25 @@ async function chooseSwiftFile(page, name, contents) {
       assert(await page.locator(`[data-panel="${name}"]`).isVisible());
       await assertNoPageOverflow(page);
     }
+    // Load the native HTML with the exact storage contract used before the rename.
+    const upgrade = await browser.newPage({viewport:{width:393,height:852}, isMobile:true, hasTouch:true});
+    upgrade.on("pageerror", error => errors.push(error.message));
+    const oldProject = {
+      project:{format:"xcode-pocket-project", version:2, files:{"Original.swift":"let retained = 4817\n"}},
+      active:"Original.swift", builds:[],
+      settings:{appName:"MyExistingApp", bundleId:"cz.example.existingproject", repo:"HappyMistake64/Xcode-for-iphone"}
+    };
+    await upgrade.addInitScript(initial => {
+      if (!localStorage.getItem("xcode-pocket-standalone-v1")) {
+        localStorage.setItem("xcode-pocket-standalone-v1", JSON.stringify(initial));
+      }
+    }, oldProject);
+    await upgrade.goto(pathToFileURL(process.argv[2]).href);
+    await upgrade.waitForFunction(() => Boolean(window.pocketIDE));
+    assert.equal(await upgrade.evaluate(() => window.pocketIDE.getActive()), oldProject.active);
+    assert.deepEqual(await upgrade.evaluate(() => window.pocketIDE.getProject()), oldProject.project);
+    assert.equal(await upgrade.locator("#ide-title").textContent(), oldProject.settings.appName);
+    await upgrade.close();
     assert.deepEqual(errors, []);
     console.log("Project navigator, persistent editing, local import, collision handling, quick open and narrow navigation passed.");
   } finally {

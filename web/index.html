@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#18191d">
+  <meta name="theme-color" content="#111215">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Xcode Pocket">
+  <meta name="apple-mobile-web-app-title" content="SwiDe">
   <meta name="description" content="Mobilní editor Swift a sestavení iOS aplikací přes GitHub Actions.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
-  <title>Xcode Pocket</title>
+  <title>SwiDe</title>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -56,10 +56,10 @@ THE SOFTWARE.
 <symbol id="ico-photo" viewBox="0 0 16 16"><path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3"/><path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 2 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2M14 2H4a1 1 0 0 0-1 1h9.002a2 2 0 0 1 2 2v7A1 1 0 0 0 15 11V3a1 1 0 0 0-1-1M2.002 4a1 1 0 0 0-1 1v8l2.646-2.354a.5.5 0 0 1 .63-.062l2.66 1.773 3.71-3.71a.5.5 0 0 1 .577-.094l1.777 1.947V5a1 1 0 0 0-1-1z"/></symbol>
   </svg>
   <header class="topbar">
-    <div class="identity"><div class="titles"><button type="button" data-command="connection" aria-label="Nastavení projektu"><strong id="ide-title">PocketApp</strong><svg aria-hidden="true"><use href="#ico-down"/></svg></button><span class="build-destination"><svg aria-hidden="true"><use href="#ico-preview"/></svg> iOS · vzdálený Mac</span></div></div>
+    <div class="identity"><div class="titles"><button type="button" data-command="connection" aria-label="Nastavení projektu"><strong id="ide-title">PocketApp</strong><svg aria-hidden="true"><use href="#ico-down"/></svg></button><span class="build-destination"><svg aria-hidden="true"><use href="#ico-preview"/></svg> SwiDe · vzdálený Mac</span></div></div>
     <div class="head-actions"><button id="palette-open" type="button" data-command="palette" class="command-button" aria-label="Paleta příkazů" title="Paleta příkazů">⌘</button><button id="btn-build" type="button" aria-label="Sestavit aplikaci" title="Sestavit aplikaci"><svg aria-hidden="true"><use href="#ico-play"/></svg></button></div>
   </header>
-  <nav class="activity-rail" aria-label="Pracovní prostor">
+  <nav class="activity-rail" aria-label="Pracovní prostor SwiDe">
     <button type="button" data-view="project" aria-label="Soubory" title="Soubory"><svg aria-hidden="true"><use href="#ico-doc"/></svg><span>Soubory</span></button>
     <button type="button" data-command="project-search" aria-label="Hledat v projektu" title="Hledat v projektu"><svg aria-hidden="true"><use href="#ico-find"/></svg><span>Hledat v projektu</span></button>
     <button type="button" data-command="diff" aria-label="Správa verzí" title="Správa verzí"><svg aria-hidden="true"><use href="#ico-git"/></svg><span>Správa verzí</span></button>
@@ -126,7 +126,7 @@ THE SOFTWARE.
     </section>
     <section class="panel preview" data-panel="preview" data-view-panel="preview" hidden>
       <div class="panel-heading"><h1>Náhled</h1></div>
-      <p>Sestav aktuální Pocket projekt na vzdáleném Macu a zachyť první obrazovku aplikace v simulátoru iPhonu.</p>
+      <p>Sestav aktuální projekt ve SwiDe na vzdáleném Macu a zachyť první obrazovku aplikace v simulátoru iPhonu.</p>
       <label class="field">Vzhled simulátoru<select id="preview-appearance"><option value="default">Výchozí</option><option value="light">Světlý</option><option value="dark">Tmavý</option><option value="both">Světlý i tmavý snímek</option></select></label>
       <label class="field">Volitelný bod zastavení LLDB<input id="debug-at" placeholder="ContentView.swift:12" autocapitalize="off" spellcheck="false"></label>
       <p class="small">Pro jednorázový záznam zásobníku a lokálních proměnných zadej soubor a řádek dosažitelný při spuštění. Výsledný debug.json otevři v Konzoli, kde uvidíš zásobník a proměnné.</p>

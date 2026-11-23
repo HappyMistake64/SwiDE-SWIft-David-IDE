@@ -1,6 +1,6 @@
-# Xcode Pocket — mobilní editor
+# SwiDe — mobilní editor
 
-Adresář web/ obsahuje nového samostatného klienta pro iPhone. Nenahrazuje automaticky starší externí editor ChatGPT Sites, jehož zdrojový kód není v tomto repozitáři.
+Adresář `web/` obsahuje rozhraní editoru pro Safari a pro nativní aplikaci SwiDe. [Otevřít webovou verzi](https://happymistake64.github.io/Xcode-for-iphone/) · [Stáhnout SwiDe.ipa](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/SwiDe.ipa)
 
 ## Funkce
 - Úpravy SwiftUI souborů, více souborů, lokální autosave, import/export JSON.
@@ -14,11 +14,7 @@ Adresář web/ obsahuje nového samostatného klienta pro iPhone. Nenahrazuje au
 
 V GitHub repozitáři otevři Settings → Pages → Build and deployment → Source = GitHub Actions.
 
-Workflow .github/workflows/pocket-pages.yml bude automaticky publikovat web/ při změnách na main. Po skutečně úspěšném deploymentu je očekávaná adresa:
-
-https://happymistake64.github.io/Xcode-for-iphone/
-
-Dokud deployment nepotvrdí GitHub Pages, nepovažuj tuto adresu za funkční.
+Workflow `.github/workflows/pocket-pages.yml` publikuje `web/` při změnách na `main`. Výsledek nasazení najdeš v GitHub Actions.
 
 ## Přihlášení
 

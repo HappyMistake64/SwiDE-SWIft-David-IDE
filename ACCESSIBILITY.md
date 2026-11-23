@@ -1,4 +1,4 @@
-# Přístupnost Xcode Pocket
+# Přístupnost SwiDe
 
 Cílem je, aby při výběru souboru, úpravě kódu a čtení výsledku sestavení šlo poznat aktuální stav i bez rozlišování barev. Při hlášení bariéry pomůže vědět, ve kterém kroku se práce zastavila.
 

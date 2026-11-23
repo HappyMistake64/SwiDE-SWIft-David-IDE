@@ -28,7 +28,9 @@ xcrun lipo "$app_dir/XcodePocketEditor" -verify_arch arm64
 codesign --force --sign - --timestamp=none "$app_dir"
 codesign --verify --strict "$app_dir"
 
-archive="$work_dir/Xcode-Pocket-Editor.ipa"
+archive="$work_dir/SwiDe.ipa"
 (cd "$work_dir" && /usr/bin/zip -qr "$archive" Payload)
 /usr/bin/unzip -tq "$archive"
-mv "$archive" "$out_dir/Xcode-Pocket-Editor.ipa"
+mv "$archive" "$out_dir/SwiDe.ipa"
+# Older installation instructions link directly to this release asset.
+cp "$out_dir/SwiDe.ipa" "$out_dir/Xcode-Pocket-Editor.ipa"

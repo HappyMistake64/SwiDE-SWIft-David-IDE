@@ -8,6 +8,9 @@ const visible = el => {
     bounds.bottom > 0 && getComputedStyle(el).visibility !== "hidden";
 };
 try {
+  assert(document.title === "SwiDe", "Incorrect editor product name");
+  assert(document.querySelector('meta[name="apple-mobile-web-app-title"]')?.content === "SwiDe",
+    "Incorrect home screen web app name");
   assert(location.protocol === "file:", "Expected the native file origin");
   document.querySelector('[data-view="code"]').click();
   const code = id("code");
@@ -95,7 +98,7 @@ try {
   row().click();
   document.activeElement?.blur();
   window.scrollTo(0, 0);
-  return {passed:true, engine:"WKWebView", origin:location.protocol, edited:name, requests:verified,
+  return {passed:true, editorName:document.title, engine:"WKWebView", origin:location.protocol, edited:name, requests:verified,
     tokenPersisted:false, simulatedGitHubResponse:true, importedFile:importedName,
     simulatedPickerSelection:true, persistedImportedSource:true, userAgent:navigator.userAgent};
 } catch (err) {

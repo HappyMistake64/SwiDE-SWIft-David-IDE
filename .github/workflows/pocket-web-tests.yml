@@ -1,4 +1,4 @@
-name: Pocket iPhone Editor tests
+name: SwiDe iPhone Editor tests
 on:
   pull_request:
     paths:

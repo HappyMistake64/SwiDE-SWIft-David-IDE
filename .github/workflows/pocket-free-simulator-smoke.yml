@@ -1,5 +1,5 @@
 # Self-contained public sample only. No checkout, secrets, cache or artifact upload.
-name: Pocket Free Simulator Smoke
+name: SwiDe Free Simulator Smoke
 run-name: Pocket Smoke ${{ inputs.request_id }}
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
           cd "$RUNNER_TEMP"
           cat > generate_project.py <<'PYGENERATOR'
           #!/usr/bin/env python3
-          """Generate a dependency-free Xcode project from an Xcode Pocket JSON export.
+          """Generate a dependency-free Xcode project from an SwiDe JSON export.
           
           The generated application target is always PocketApp; Tests/**/*.swift adds PocketAppTests. This generator does not compile or sign
           anything: run xcodebuild on macOS after it finishes. Nested .swift files and UTF-8 Resources/ files are supported.

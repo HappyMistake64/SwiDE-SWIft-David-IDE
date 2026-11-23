@@ -1,4 +1,4 @@
-name: Check Pocket simulator screenshot
+name: Check SwiDe simulator screenshot
 on:
   workflow_dispatch:
   push:

@@ -1,4 +1,4 @@
-name: Pocket Swift language query
+name: SwiDe Swift language query
 run-name: Pocket SourceKit ${{ inputs.request_id }}
 on:
   workflow_dispatch:

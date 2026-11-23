@@ -21,7 +21,12 @@ mkdir "$app"
 python3 pocket-editor/bundle.py web "$app/index.html"
 cp tests/wkwebview/Smoke.js "$app/Smoke.js"
 cp pocket-editor/Info.plist "$app/Info.plist"
-bundle_id="cz.vozentiq.xcodepocket.editor.webkittest"
+display_name="$(plutil -extract CFBundleDisplayName raw "$app/Info.plist")"
+release_id="$(plutil -extract CFBundleIdentifier raw "$app/Info.plist")"
+executable="$(plutil -extract CFBundleExecutable raw "$app/Info.plist")"
+[[ "$display_name" == "SwiDe" && "$release_id" == "cz.vozentiq.xcodepocket.editor" ]]
+echo "Verified release bundle: $display_name ($release_id)"
+bundle_id="$release_id.webkittest"
 plutil -replace CFBundleIdentifier -string "$bundle_id" "$app/Info.plist"
 plutil -replace CFBundleSupportedPlatforms.0 -string iPhoneSimulator "$app/Info.plist"
 plutil -remove UIRequiredDeviceCapabilities "$app/Info.plist"
@@ -29,7 +34,7 @@ sdk_path="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 arch="$(uname -m)"
 xcrun --sdk iphonesimulator clang -target "$arch-apple-ios17.0-simulator" -isysroot "$sdk_path" \
    -fobjc-arc -fmodules -Os pocket-editor/Editor.m tests/wkwebview/SmokeObserver.m \
-   -framework UIKit -framework WebKit -framework Foundation -o "$app/XcodePocketEditor"
+   -framework UIKit -framework WebKit -framework Foundation -o "$app/$executable"
 codesign --force --sign - --timestamp=none "$app"
 
 selection="$(python3 - <<'PY'
@@ -61,7 +66,7 @@ import json, sys
 from pathlib import Path
 result = json.loads(Path(sys.argv[1]).read_text())
 print(json.dumps(result, ensure_ascii=False, indent=2))
-if (result.get("passed") is not True or result.get("engine") != "WKWebView"
+if (result.get("passed") is not True or result.get("engine") != "WKWebView" or result.get("editorName") != "SwiDe"
         or result.get("origin") != "file:" or result.get("requests") != 1
         or result.get("tokenPersisted") is not False):
     sys.exit("Native WKWebView regression failed.")

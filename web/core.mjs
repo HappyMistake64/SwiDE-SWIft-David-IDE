@@ -1,4 +1,4 @@
-// Xcode Pocket: browser protocol shared by the UI and Node tests.
+// SwiDe browser protocol shared by the UI and Node tests.
 export const REPOSITORY = "HappyMistake64/Xcode-for-iphone";
 export const WORKFLOW = ".github/workflows/pocket-ios.yml";
 export const STORAGE_KEY = "xcode-pocket-standalone-v1";

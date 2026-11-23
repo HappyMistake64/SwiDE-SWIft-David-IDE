@@ -1,5 +1,5 @@
 # POCKET_WORKFLOW_VERSION = 5
-name: Pocket iOS build
+name: SwiDe iOS build
 run-name: Pocket iOS ${{ inputs.request_id }}
 
 on:

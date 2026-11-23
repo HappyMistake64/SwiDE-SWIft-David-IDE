@@ -259,7 +259,7 @@ function exportProject() {
       return;
     }
     const url=URL.createObjectURL(new Blob([JSON.stringify(state.project)],{type:"application/json"}));
-    const a=htmlEl("a");a.href=url;a.download="xcode-pocket-project.json";a.click();
+    const a=htmlEl("a");a.href=url;a.download="swide-project.json";a.click();
     setTimeout(()=>URL.revokeObjectURL(url),1000);note("Projekt exportován.","success");
   }catch(err){note(errorMessage(err),"error");}
 }

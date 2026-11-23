@@ -317,7 +317,21 @@
   }
   const definitions = {
     "snapshots":["Import, export a kontrolní bod projektu",()=>revealTool("snapshots")],
-    "device":["Soubory a složky z iPhonu",()=>revealTool("device-files")],
+    "device":["Přidat jednotlivé soubory",()=>revealTool("device-files")],
+    "session":["Uložit, zavřít nebo vytvořit projekt",()=>revealTool("project-session")],
+    "save-project":["Uložit projekt v zařízení",()=>{
+      revealTool("project-session");
+      window.pocketProjectSession.save();
+    }],
+    "close-project":["Uložit a zavřít projekt",()=>window.pocketProjectSession.close()],
+    "open-zip":["Otevřít ZIP",()=>{
+      revealTool("zip-workspace");
+      document.dispatchEvent(new Event("pocket:pick-zip"));
+    }],
+    "open-folder":["Otevřít složku",()=>{
+      revealTool("zip-workspace");
+      document.dispatchEvent(new Event("pocket:pick-folder"));
+    }],
     "assets":["Spravovat obrázky a imagesety",()=>revealTool("assets")],
     "language":["Swift · přejít na definici a doplnit kód",()=>revealTool("language-tools")],
     "editor-tools":["Šablony, skládání kódu a přesun souboru",()=>revealTool("editor-tools")],
@@ -454,6 +468,10 @@
   id("btn-device-import").addEventListener("click", () => {
     selectPanel("project", "device");
     document.dispatchEvent(new Event("pocket:import-files"));
+  });
+  document.addEventListener("pocket:zip-selected", event => {
+    revealTool("zip-workspace");
+    document.dispatchEvent(new CustomEvent("pocket:open-zip", {detail:{file:event.detail.file}}));
   });
   document.addEventListener("pocket:device-imported", event => {
     const path = event.detail?.paths?.[0], project = api().getProject();

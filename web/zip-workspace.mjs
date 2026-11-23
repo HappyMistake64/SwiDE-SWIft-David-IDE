@@ -1,4 +1,5 @@
 import {renderStringCatalog} from "./string-catalog.mjs";
+import {folderSelectionToZip,nativeFolderToZip} from "./folder-import.mjs";
 import {mountOriginalRun} from "./original-run.mjs";
 // Classic ZIP workspace for iPhone. Codec implementations are supplied by WebKit.
 const MiB = 1024 * 1024;
@@ -56,9 +57,12 @@ function parseDirectory(bytes) {
       "Nesouhlasí velikost nebo kontrolní součet v hlavičkách ZIP.");
     const nameBytes = bytes.subarray(cursor+46, cursor+46+nameSize);
     check(nameBytes.every((b,i) => b === bytes[local+30+i]), "Názvy v hlavičkách ZIP se liší.");
-    check((flags & 2048) || nameBytes.every(b => b < 128), "Název souboru není označen jako UTF-8.");
-    const path = zipDecoder.decode(nameBytes), dir = path.endsWith("/");
-    check(safePath(path), "ZIP obsahuje nepovolenou cestu.");
+    let rawPath;
+    try { rawPath = zipDecoder.decode(nameBytes); }
+    catch { throw new Error("Název položky ZIP nelze přečíst jako UTF-8."); }
+    const path = rawPath.replace(/^(?:\.\/)+/, ""), dir = rawPath.endsWith("/");
+    const rootEntry = dir && path === "";
+    check(rawPath.length <= 1024 && (rootEntry || safePath(path)), "ZIP obsahuje nepovolenou cestu.");
     const key = path.replace(/\/$/, "").normalize("NFC").toLowerCase();
     check(!explicit.has(key), "ZIP obsahuje duplicitní cestu.");
     explicit.add(key);
@@ -93,7 +97,10 @@ function parseDirectory(bytes) {
 
 async function unpack(entry) {
   if (entry.method === 0) return entry.packed;
-  const stream = new Blob([entry.packed]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  let codec;
+  try { codec = new DecompressionStream("deflate-raw"); }
+  catch { throw Error("Tato verze prohlížeče neumí rozbalit ZIP s kompresí DEFLATE. Aktualizuj iOS nebo rozbal archiv v Souborech a otevři složku projektu."); }
+  const stream = new Blob([entry.packed]).stream().pipeThrough(codec);
   const reader = stream.getReader(), bytes = new Uint8Array(entry.size);
   let offset = 0;
   try {
@@ -130,7 +137,7 @@ export async function openZipWorkspace(bytes) {
       } catch { /* Binary plist and non-UTF-8 text are preserved without editing. */ }
     }
   }
-  return entries;
+  return entries.filter(entry => entry.path !== "");
 }
 
 export function exportZipWorkspace(entries) {
@@ -224,6 +231,8 @@ async function readSavedWorkspace(db) {
       if (!c) { done(result); return; }
       if (c.key === "original") result.original = c.value;
       if (c.key === "id") result.id = c.value;
+      if (c.key === "closed") result.closed = c.value;
+      if (c.key === "selected") result.selected = c.value;
       if (typeof c.key === "string" && c.key.startsWith("edit:")) result.edits.set(c.key.slice(5),c.value);
       c.continue();
     };
@@ -240,14 +249,17 @@ function replaceSavedWorkspace(db,id,original,expectedId) {
     };
   });
 }
-function saveFileEdit(db,id,entry,edited) {
+function putEdit(store, entry, edited) {
+  const key = "edit:" + entry.path;
+  if (edited === entry.text) store.delete(key);
+  else store.put(edited, key);
+}
+function updateSavedWorkspace(db, expectedId, write) {
   return workspaceTransaction(db,"readwrite",(store,tx) => {
     const current = store.get("id");
     current.onsuccess = () => {
-      if (current.result !== id) { tx.abort(); return; }
-      const key = "edit:"+entry.path;
-      if (edited === entry.text) store.delete(key);
-      else store.put(edited,key);
+      if (current.result !== expectedId) { tx.abort(); return; }
+      write(store);
     };
   });
 }
@@ -260,24 +272,39 @@ export function mountZipWorkspace(container) {
     if (text) node.textContent = text;
     return node;
   };
-  const choose = make("button","Otevřít ZIP"), save = make("button","Exportovat ZIP");
-  const originalExport = make("button","Exportovat původní ZIP");
-  choose.type = save.type = originalExport.type = "button"; save.disabled = originalExport.disabled = true;
-  const input = make("input");
-  input.type = "file"; input.accept = ".zip,application/zip"; input.hidden = true;
+  function button(text) {
+    const item = make("button",text);
+    item.type = "button";
+    return item;
+  }
+  const choose = button("Otevřít ZIP"), folder = button("Otevřít složku projektu");
+  const save = button("Exportovat ZIP"), originalExport = button("Exportovat původní ZIP");
+  const checkpoint = button("Uložit projekt"), close = button("Zavřít projekt"), reopen = button("Otevřít poslední projekt");
+  checkpoint.id="zip-save"; close.id="zip-close"; reopen.id="zip-reopen";
+  choose.id="zip-pick"; folder.id="zip-pick-folder";
+  const input = make("input"); input.type = "file"; input.hidden = true; input.id="zip-input";
+  const directory = make("input"); directory.type = "file"; directory.multiple = true;
+  directory.setAttribute("webkitdirectory", ""); directory.hidden = true; directory.id="zip-folder-input";
+  const hint = make("p","ZIP do 20 MiB, bez šifrování, nejvýše 2 000 položek a 50 MiB po rozbalení. Poslední projekt a jeho změny se ukládají v tomto zařízení.");
+  hint.className = "small muted";
   const filename = make("p","Žádný otevřený archiv."), label = make("label","Soubor v archivu ");
   const select = make("select"); select.disabled = true; label.append(select);
   const editor = make("textarea");
   editor.spellcheck = false; editor.hidden = true; editor.setAttribute("aria-label","Text souboru v archivu");
   const status = make("p"); status.setAttribute("role","status");
   const catalogPanel = make("fieldset"); catalogPanel.hidden = true;
-  container.append(choose,input,filename,label,editor,catalogPanel,save,originalExport,status);
-  let entries = [], archiveName = "", originalFile, db, workspaceId, editSequence = 0;
+  container.append(choose,folder,input,directory,hint,filename,label,editor,catalogPanel,checkpoint,close,reopen,save,originalExport,status);
+  let entries = [], archiveName = "", originalFile, db, workspaceId, closedName = "", editSequence = 0, busy = false;
+  const dirty = new Map();
   const updateOriginalRun = mountOriginalRun(container,()=>({entries,pack:()=>exportZipWorkspace(entries)}));
-  function updateButtons(busy) {
-    choose.disabled = editor.disabled = catalogPanel.disabled = busy;
+  function updateButtons(locked) {
+    busy = locked;
+    choose.disabled = folder.disabled = editor.disabled = catalogPanel.disabled = busy;
     select.disabled = busy || !entries.length;
     save.disabled = originalExport.disabled = busy || !originalFile;
+    checkpoint.disabled = close.disabled = busy || !originalFile || !db;
+    reopen.disabled = busy || !closedName || !!originalFile;
+    document.dispatchEvent(new CustomEvent("pocket:zip-state",{detail:{open:!!originalFile,name:archiveName || closedName,busy,canReopen:!reopen.disabled}}));
   }
   const show = () => {
     const e = entries[Number(select.value)];
@@ -292,35 +319,46 @@ export function mountZipWorkspace(container) {
       ? (db ? "Změny se ukládají na tomto zařízení." : "Úložiště není dostupné. Ulož změny pomocí Exportovat ZIP.")
       : "Tato položka zůstane v exportu beze změny.";
   };
-  function displayArchive(candidate,file) {
+  function displayArchive(candidate,file,selected) {
+    dirty.clear(); closedName = "";
     entries = candidate; originalFile = file; archiveName = file.name;
     updateOriginalRun(entries);
     filename.textContent = file.name + " · " + entries.length + " položek";
     select.replaceChildren(...entries.map((e,i)=>{
       const option = make("option",e.path); option.value = String(i); return option;
     }));
-    const first = entries.findIndex(e => typeof e.text === "string");
+    const remembered = selected && entries.findIndex(e => e.path === selected);
+    const first = Number.isInteger(remembered) && remembered >= 0 ? remembered : entries.findIndex(e => typeof e.text === "string");
     if (first >= 0) select.selectedIndex = first;
     show();
   }
-  updateButtons(true);
-  void (async () => {
-    try {
-      db = await openWorkspaceDB();
-      const saved = await readSavedWorkspace(db);
-      workspaceId = saved.id;
-      if (saved.original) {
-        const candidate = await openZipWorkspace(new Uint8Array(await saved.original.arrayBuffer()));
-        for (const entry of candidate) {
-          if (typeof entry.text === "string" && saved.edits.has(entry.path)) entry.edit = saved.edits.get(entry.path);
-        }
-        displayArchive(candidate,saved.original);
-      }
-    } catch (error) {
-      status.textContent = "Obnovení ZIP není dostupné. " + (error.message || "");
-    } finally { updateButtons(false); }
-  })();
-  choose.addEventListener("click",()=>input.click());
+  async function decodeSaved(saved) {
+    const candidate = await openZipWorkspace(new Uint8Array(await saved.original.arrayBuffer()));
+    for (const entry of candidate) {
+      if (typeof entry.text === "string" && saved.edits.has(entry.path)) entry.edit = saved.edits.get(entry.path);
+    }
+    return candidate;
+  }
+  async function operate(operation) {
+    if (busy) return;
+    updateButtons(true);
+    try { await operation(); }
+    catch (error) { status.textContent = error.message || String(error); }
+    finally { updateButtons(false); }
+  }
+  void operate(async () => {
+    db = await openWorkspaceDB();
+    const saved = await readSavedWorkspace(db);
+    workspaceId = saved.id;
+    if (!saved.original) return;
+    if (saved.closed) {
+      closedName = saved.original.name;
+      filename.textContent = "Poslední zavřený projekt: " + closedName;
+    } else displayArchive(await decodeSaved(saved),saved.original,saved.selected);
+  });
+  const pickZip = () => { if (!busy) input.click(); };
+  choose.addEventListener("click",pickZip);
+  document.addEventListener("pocket:pick-zip",pickZip);
   select.addEventListener("change",show);
   function saveEdit(e, edited) {
     if (e !== entries[Number(select.value)] || editor.disabled) throw Error("Výběr souboru se změnil.");
@@ -331,7 +369,10 @@ export function mountZipWorkspace(container) {
     if (db) {
       const sequence = ++editSequence, id = workspaceId;
       status.textContent = "Ukládám změnu…";
-      void saveFileEdit(db,id,e,edited).then(()=>{
+      const change = {entry:e, edited};
+      dirty.set(e.path,change);
+      void updateSavedWorkspace(db,id,store=>putEdit(store,e,edited)).then(()=>{
+        if (dirty.get(e.path) === change) dirty.delete(e.path);
         if (id === workspaceId && sequence === editSequence) status.textContent = "Změna uložena na tomto zařízení.";
       }).catch(error=>{
         if (id === workspaceId && sequence === editSequence) status.textContent = "Změnu se nepodařilo uložit. Exportuj ZIP. " + error.message;
@@ -344,26 +385,91 @@ export function mountZipWorkspace(container) {
     try { saveEdit(e, e.crlf ? editor.value.replace(/\n/g,"\r\n") : editor.value); }
     catch (error) { editor.value = e.edit ?? e.text; status.textContent = error.message; }
   });
-  input.addEventListener("change", async () => {
-    const file = input.files[0];
-    input.value = "";
-    if (!file) return;
-    if (entries.some(e => e.edit !== undefined && e.edit !== e.text) &&
-        !window.confirm("Otevřít jiný ZIP a zahodit neexportované změny?")) return;
-    updateButtons(true);
-    status.textContent = "Kontroluji archiv…";
-    try {
+  function loadFile(readFile) {
+    return operate(async () => {
+      const file = await readFile();
+      if (!file) return;
+      status.textContent = "Kontroluji archiv…";
       check(file.size <= zipLimits.input,"ZIP musí mít nejvýše 20 MiB.");
       const candidate = await openZipWorkspace(new Uint8Array(await file.arrayBuffer()));
+      if (closedName || entries.some(e => e.edit !== undefined && e.edit !== e.text)) {
+        if (!window.confirm("Nahradit poslední projekt v zařízení? Pro uchování obou projektů nejprve exportuj předchozí ZIP.")) {
+          status.textContent = "Aktuální výběr zůstal zachován.";
+          return;
+        }
+      }
       const id = crypto.randomUUID();
       if (db) await replaceSavedWorkspace(db,id,file,workspaceId);
       workspaceId = id;
       displayArchive(candidate,file);
-    } catch (error) {
-      status.textContent = error.message || "ZIP se nepodařilo otevřít.";
-    } finally {
-      updateButtons(false);
-    }
+    });
+  }
+  input.addEventListener("change",() => {
+    const file = input.files[0]; input.value = "";
+    if (file) void loadFile(() => file);
+  });
+  document.addEventListener("pocket:open-zip",event => {
+    if (event.detail?.file) void loadFile(() => event.detail.file);
+  });
+  function pickFolder() {
+    if (busy) return;
+    const native = globalThis.webkit?.messageHandlers?.importFolder;
+    if (native) {
+      void loadFile(async () => {
+        const result = await native.postMessage({});
+        return result && nativeFolderToZip(result,exportZipWorkspace,crc32);
+      });
+    } else if ("webkitdirectory" in directory) directory.click();
+    else status.textContent = "Výběr složky není dostupný. V Souborech složku zkomprimuj a otevři ZIP.";
+  }
+  directory.addEventListener("change",() => {
+    const files = Array.from(directory.files); directory.value = "";
+    if (files.length) void loadFile(() => folderSelectionToZip(files,exportZipWorkspace,crc32));
+  });
+  folder.addEventListener("click", pickFolder);
+  document.addEventListener("pocket:pick-folder",pickFolder);
+  function persistProject(closing) {
+    if (!db || !originalFile || busy) return;
+    void operate(async () => {
+      const selected = entries[Number(select.value)]?.path || "";
+      const nextId = closing ? crypto.randomUUID() : workspaceId;
+      ++editSequence;
+      await updateSavedWorkspace(db,workspaceId,store => {
+        for (const {entry,edited} of dirty.values()) putEdit(store,entry,edited);
+        store.put(selected,"selected");
+        store.put(closing,"closed");
+        store.put(nextId,"id");
+      });
+      workspaceId = nextId; dirty.clear();
+      if (closing) {
+        closedName = archiveName; entries = []; originalFile = undefined; archiveName = "";
+        updateOriginalRun(entries); select.replaceChildren(); show();
+        filename.textContent = "Poslední zavřený projekt: " + closedName;
+      }
+      status.textContent = closing ? "Projekt byl uložen a zavřen." : "Projekt byl uložen na tomto zařízení.";
+    });
+  }
+  function reopenProject() {
+    if (!closedName || !db || busy) return;
+    void operate(async () => {
+      const saved = await readSavedWorkspace(db);
+      check(saved.id === workspaceId && saved.closed && saved.original,"Uložený projekt se změnil v jiném okně. Obnov stránku.");
+      const candidate = await decodeSaved(saved), nextId = crypto.randomUUID();
+      await updateSavedWorkspace(db,workspaceId,store => {
+        store.put(nextId,"id"); store.put(false,"closed");
+      });
+      workspaceId = nextId;
+      displayArchive(candidate,saved.original,saved.selected);
+      status.textContent = "Projekt byl znovu otevřen ze zařízení.";
+    });
+  }
+  checkpoint.onclick = () => persistProject(false);
+  close.onclick = () => persistProject(true);
+  reopen.onclick = reopenProject;
+  document.addEventListener("pocket:zip-command",event=>{
+    if (event.detail?.action === "save") persistProject(false);
+    if (event.detail?.action === "close") persistProject(true);
+    if (event.detail?.action === "reopen") reopenProject();
   });
   const exportCurrent = async original => {
     updateButtons(true);

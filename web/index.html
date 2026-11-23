@@ -67,20 +67,21 @@ THE SOFTWARE.
     <button type="button" data-view="code" aria-label="Editor" title="Editor"><svg aria-hidden="true"><use href="#ico-code"/></svg><span>Editor</span></button>
     <button type="button" data-view="preview" aria-label="Náhled" title="Náhled"><svg aria-hidden="true"><use href="#ico-preview"/></svg><span>Náhled</span></button>
     <button type="button" data-view="console" aria-label="Konzole" title="Konzole"><svg aria-hidden="true"><use href="#ico-console"/></svg><span>Konzole</span></button>
-    <button type="button" data-command="original" aria-label="Projekty ZIP" title="Projekty ZIP"><svg aria-hidden="true"><use href="#ico-package"/></svg><span>Projekty ZIP</span></button>
+    <button type="button" data-command="original" aria-label="ZIP a složky" title="ZIP a složky"><svg aria-hidden="true"><use href="#ico-package"/></svg><span>ZIP a složky</span></button>
     <button type="button" data-command="connection" aria-label="Nastavení" title="Nastavení"><svg aria-hidden="true"><use href="#ico-settings"/></svg><span>Nastavení</span></button>
   </nav>
   <main class="layout">
     <section class="panel project" data-panel="project" data-view-panel="project">
       <div data-topic="files" class="browser-files">
         <div class="browser-heading"><h1>Soubory</h1><div class="head-actions"><button type="button" id="btn-device-import" class="glyph-button" title="Přidat soubory z iPhonu" aria-label="Přidat soubory z iPhonu"><svg aria-hidden="true"><use href="#ico-plus"/></svg></button><button type="button" id="file-actions" class="glyph-button" title="Další akce projektu" aria-label="Další akce projektu" aria-expanded="false" aria-controls="file-actions-menu"><svg aria-hidden="true"><use href="#ico-more"/></svg></button></div></div>
-        <div id="file-actions-menu" class="file-actions-menu" hidden><button type="button" id="btn-add">Nový soubor</button><button type="button" data-command="device">Soubory a složky z iPhonu</button><button type="button" data-command="assets">Obrázky a asset katalog</button><button type="button" data-command="original">Otevřít projekt ZIP</button><button type="button" data-command="snapshots">Import, export a kontrolní bod</button><button type="button" id="btn-remove">Odstranit otevřený soubor</button></div>
+        <div id="file-actions-menu" class="file-actions-menu" hidden><button type="button" id="btn-add">Nový soubor</button><button type="button" data-command="device">Přidat jednotlivé soubory</button><button type="button" data-command="assets">Obrázky a asset katalog</button><button type="button" data-command="open-zip">Otevřít ZIP</button><button type="button" data-command="open-folder">Otevřít složku</button><button type="button" data-command="session">Uložit, zavřít nebo vytvořit projekt</button><button type="button" data-command="snapshots">Import, export a kontrolní bod</button><button type="button" id="btn-remove">Odstranit otevřený soubor</button></div>
         <label class="navigator-filter"><svg aria-hidden="true"><use href="#ico-find"/></svg><input id="ide-filter" aria-label="Najít soubor" type="search" placeholder="Najít soubor" autocapitalize="off" autocomplete="off"></label>
         <div class="tree-scroll"><button type="button" id="tree-root" aria-expanded="true"><svg aria-hidden="true"><use href="#ico-down"/></svg> <svg aria-hidden="true"><use href="#ico-projectmark"/></svg> <span id="tree-root-title">PocketApp</span></button><div id="tree" aria-label="Soubory projektu"></div></div>
         <section id="navigator-preview" aria-label="Vybraný soubor"><div class="peek-heading"><span id="peek-name"></span><button id="open-selected-file" type="button">Otevřít v editoru ›</button></div><div id="peek-code"></div></section>
         <button type="button" class="branch-foot" data-command="diff"><svg aria-hidden="true"><use href="#ico-git"/></svg> main <svg aria-hidden="true"><use href="#ico-down"/></svg></button>
       </div>
       <div id="device-files" data-topic="device" hidden></div>
+      <div id="project-session" class="project-tool" data-topic="session" hidden></div>
       <details class="group project-tool" data-topic="search" hidden><summary>Hledat v projektu</summary><div class="group-body">
         <label class="field">Hledaný text<input id="project-search" type="search" placeholder="Text ve všech souborech" autocapitalize="off"></label>
         <div id="ide-results" aria-live="polite"></div>
@@ -102,7 +103,7 @@ THE SOFTWARE.
       </div>
       <details class="group project-tool" data-topic="assets" hidden><summary>Obrázky a asset katalog</summary><div class="group-body" id="assets"><label>Přidat imageset<input id="asset-file" type="file" accept="image/png,image/jpeg"></label><ul id="asset-list"></ul><p id="asset-message" role="status"></p></div></details>
       <details class="group project-tool" data-topic="git" hidden><summary>Změny zdrojových souborů</summary><div id="source-control" class="group-body"></div></details>
-      <details class="group project-tool" data-topic="zip" hidden><summary>ZIP archiv</summary><div id="zip-workspace" class="group-body"></div></details>
+      <details class="group project-tool" data-topic="zip" hidden><summary>Projekt ze ZIPu nebo složky</summary><div id="zip-workspace" class="group-body"></div></details>
     </section>
     <section class="panel workspace" data-panel="code" data-view-panel="code" hidden aria-label="Editor kódu">
       <div class="file-toolbar">
@@ -158,6 +159,7 @@ THE SOFTWARE.
   </dialog>
   <script type="module" src="./app.mjs"></script>
   <script type="module" src="./device-files.mjs"></script>
+  <script type="module" src="./project-session.mjs"></script>
   <script type="module" src="./syntax.mjs"></script>
   <script type="module" src="./ide.mjs"></script>
   <script type="module" src="./zip-workspace.mjs"></script>

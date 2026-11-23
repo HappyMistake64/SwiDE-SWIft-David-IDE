@@ -98,7 +98,24 @@ try {
   row().click();
   document.activeElement?.blur();
   window.scrollTo(0, 0);
-  return {passed:true, editorName:document.title, engine:"WKWebView", origin:location.protocol, edited:name, requests:verified,
+  const zip = id("zip-workspace"), folder = id("zip-pick-folder");
+  assert(zip && folder && typeof window.webkit?.messageHandlers?.importFolder?.postMessage === "function",
+    "Missing ZIP workspace or native folder bridge");
+  for (let i=0; i<100 && folder.disabled; i++) await wait(40);
+  assert(!folder.disabled, "Native folder import did not initialize");
+  folder.click();
+  const zipFiles = zip.querySelector("select");
+  const path = "Sources/Nested/Marker.swift";
+  const option = label => Array.from(zipFiles.options).find(entry => entry.textContent === label);
+  for (let i=0; i<250 && !option(path); i++) await wait(80);
+  assert(option(path) && option("Empty/"),
+    "Native folder snapshot lost a nested file or empty directory. " + zip.querySelector("[role=status]").textContent);
+  zipFiles.value=option(path).value;
+  zipFiles.dispatchEvent(new Event("change", {bubbles:true}));
+  assert(zip.querySelector("textarea").value === "let nativeFolderMarker = 4817\n", "Folder Swift content mismatch");
+  assert(window.pocketIDE.getProject().files[importedName] === importedSource, "Folder import replaced the separate Swift project");
+  return {passed:true, nativeFolderReader:true, nativeFolderBridge:true, nativeFolderZIP:true,
+    folderUISelection:"simulated delegate callback", rejectedFolderSymlink:true, editorName:document.title, engine:"WKWebView", origin:location.protocol, edited:name, requests:verified,
     tokenPersisted:false, simulatedGitHubResponse:true, importedFile:importedName,
     simulatedPickerSelection:true, persistedImportedSource:true, userAgent:navigator.userAgent};
 } catch (err) {

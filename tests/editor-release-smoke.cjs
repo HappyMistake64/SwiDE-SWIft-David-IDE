@@ -12,7 +12,7 @@ async function assertNoPageOverflow(page) {
     `The ${widths.viewport}px layout expands to ${widths.document}px.`);
 }
 
-async function chooseSwiftFile(page, name, contents) {
+async function chooseDeviceFile(page, name, contents) {
   const [chooser] = await Promise.all([
     page.waitForEvent("filechooser"),
     page.locator("#btn-device-import").click()
@@ -53,7 +53,7 @@ async function chooseSwiftFile(page, name, contents) {
     await projectTab.click();
     const importedName = "DeviceFixture.swift";
     const original = "import Foundation\nlet deviceValue = 4817\n";
-    await chooseSwiftFile(page, importedName, original);
+    await chooseDeviceFile(page, importedName, original);
     await page.waitForFunction(name => window.pocketIDE.getProject().files[name] !== undefined, importedName);
     await projectTab.click();
     await sourceRow(importedName).click();
@@ -61,7 +61,7 @@ async function chooseSwiftFile(page, name, contents) {
     assert.equal(await code.inputValue(), original);
     await projectTab.click();
     const before = await page.evaluate(() => JSON.stringify(window.pocketIDE.getProject()));
-    await chooseSwiftFile(page, importedName, "let overwritten = true\n");
+    await chooseDeviceFile(page, importedName, "let overwritten = true\n");
     await page.waitForFunction(() => /soubor už existuje/i.test(document.querySelector("#device-files [role=status]")?.textContent || ""));
     assert.equal(await page.evaluate(() => JSON.stringify(window.pocketIDE.getProject())), before);
     await page.reload();
@@ -86,6 +86,35 @@ async function chooseSwiftFile(page, name, contents) {
       assert(await page.locator(`[data-panel="${name}"]`).isVisible());
       await assertNoPageOverflow(page);
     }
+    const {exportZipWorkspace} = await import("../web/zip-workspace.mjs");
+    const saveSource = "let reopened = 4817\n";
+    const zip = exportZipWorkspace([{path:"Sources/Fixture.swift", edit:saveSource, mode:0o644, date:33, time:0}]);
+    await projectTab.click();
+    await chooseDeviceFile(page,"Fixture.zip",await zip.arrayBuffer());
+    const zipCode = page.locator('#zip-workspace textarea');
+    await zipCode.waitFor({state:"visible"});
+    assert.equal(await zipCode.inputValue(), saveSource);
+    await zipCode.fill("let reopened = 4818\n");
+    await page.locator("#zip-save").click();
+    await page.locator("#zip-close").click();
+    await page.locator("#zip-reopen").waitFor({state:"visible"});
+    await page.reload();
+    await page.getByRole("button",{name:"ZIP a složky"}).click();
+    await page.locator("#zip-reopen").click();
+    await zipCode.waitFor({state:"visible"});
+    assert.equal(await zipCode.inputValue(), "let reopened = 4818\n");
+
+    await projectTab.click();
+    await page.locator("#file-actions").click();
+    await page.getByRole("button",{name:"Uložit, zavřít nebo vytvořit projekt"}).click();
+    await page.locator("#project-session").getByRole("button",{name:"Uložit projekt"}).click();
+    await page.locator("#project-session").getByRole("button",{name:"Zavřít projekt"}).click();
+    await page.locator("#project-start-screen").waitFor({state:"visible"});
+    await page.reload();
+    await page.locator("#project-start-screen").getByRole("button",{name:"Znovu otevřít projekt"}).click();
+    await tree.waitFor({state:"visible"});
+    assert.equal(await page.evaluate(name=>window.pocketIDE.getProject().files[name],importedName),original);
+
     // Load the native HTML with the exact storage contract used before the rename.
     const upgrade = await browser.newPage({viewport:{width:393,height:852}, isMobile:true, hasTouch:true});
     upgrade.on("pageerror", error => errors.push(error.message));

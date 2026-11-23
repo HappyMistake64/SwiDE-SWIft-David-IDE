@@ -32,6 +32,26 @@ test("reject path traversal, CRC mismatch and truncated archives",async()=>{
   await assert.rejects(openZipWorkspace(original.subarray(0,80)));
 });
 
+// Python zipfile generated this archive; its UTF-8 names mirror writers that omit bit 11.
+const dotted = Buffer.from("UEsDBBQAAAAIAMBrIVAAAAAAAgAAAAAAAAACAAAALi8DAFBLAwQUAAAACADAayFQg+e+wBAAAAAOAAAAFwAAAC4vVWvDoXprYS9Lb8Whw61rLnN3aWZ0y0ktUTjSm5ilYKtgYsQFAFBLAQIUAxQAAAAIAMBrIVAAAAAAAgAAAAAAAAACAAAAAAAAAAAAAACAAQAAAAAuL1BLAQIUAxQAAAAIAMBrIVCD577AEAAAAA4AAAAXAAAAAAAAAAAAAACAASIAAAAuL1Vrw6F6a2EvS2/FocOtay5zd2lmdFBLBQYAAAAAAgACAHUAAABnAAAAAAA=","base64");
+test("ordinary dot-prefixed roots and unflagged UTF-8 filenames retain their content",async()=>{
+  const entries = await openZipWorkspace(dotted);
+  assert.deepEqual(entries.map(entry=>entry.path),["Ukázka/Košík.swift"]);
+  assert.equal(entries[0].text,"let čaj = 42\n");
+  const exported = new Uint8Array(await exportZipWorkspace(entries).arrayBuffer());
+  assert.equal((await openZipWorkspace(exported))[0].text,entries[0].text);
+  const broken = Buffer.from(dotted);
+  for(let pos=0;(pos=broken.indexOf(Buffer.from("Košík"),pos))>=0;pos+=2) broken[pos+2]=0xff;
+  await assert.rejects(openZipWorkspace(broken),/UTF-8/);
+});
+test("dot-prefix normalization rejects an otherwise traversing path",async()=>{
+  const corrupted = Buffer.from(dotted);
+  const originalPart = Buffer.from("./Ukázka/"), badPart = Buffer.from("./../xxxxx");
+  assert.equal(originalPart.length,badPart.length);
+  for(let pos=0;(pos=corrupted.indexOf(originalPart,pos))>=0;pos+=badPart.length) badPart.copy(corrupted,pos);
+  await assert.rejects(openZipWorkspace(corrupted),/nepovolenou cestu/);
+});
+
 const require = createRequire(import.meta.url);
 let chromium;
 try { ({chromium} = require("playwright")); } catch { /* Optional integration runner. */ }
@@ -54,23 +74,47 @@ test("ZIP survives reloads, rejected imports, and exports the exact original", {
     window.webkit = {messageHandlers:{exportWorkspaceZip:{postMessage:msg=>{window.lastZip=msg;}}}};
   });
   await page.goto("http://127.0.0.1:"+server.address().port+"/");
-  const input = page.locator("input[type=file]"), code = page.locator("textarea");
+  const input = page.locator("#zip-input"), code = page.locator("textarea");
   await page.waitForFunction(()=>document.querySelector("button")?.disabled===false);
   await input.setInputFiles({name:"Demo.zip",mimeType:"application/zip",buffer:original});
   await page.waitForFunction(()=>document.querySelector("textarea").value.includes("42"));
   await code.fill("let a = 43\n");
   await page.getByText("Změna uložena na tomto zařízení.").waitFor();
+  await page.locator("#zip-save").click();
+  await page.getByText("Projekt byl uložen na tomto zařízení.").waitFor();
   await page.reload();
   await page.waitForFunction(()=>document.querySelector("textarea")?.value === "let a = 43\n");
-  page.once("dialog",dialog=>dialog.accept());
+  await code.fill("let a = 44\n");
+  await page.locator("#zip-close").click();
+  await page.getByText("Projekt byl uložen a zavřen.").waitFor();
+  assert(await code.isHidden());
+  await page.reload();
+  await page.getByText("Poslední zavřený projekt: Demo.zip").waitFor();
+  assert(await code.isHidden());
+  await page.locator("#zip-reopen").click();
+  await page.getByText("Projekt byl znovu otevřen ze zařízení.").waitFor();
+  assert.equal(await code.inputValue(),"let a = 44\n");
   await input.setInputFiles({name:"bad.zip",mimeType:"application/zip",buffer:Buffer.from("invalid")});
   await page.getByText(/platnou hlavičku/).waitFor();
-  assert.equal(await code.inputValue(),"let a = 43\n");
+  assert.equal(await code.inputValue(),"let a = 44\n");
   await page.getByRole("button",{name:"Exportovat původní ZIP"}).click();
   await page.waitForFunction(()=>window.lastZip?.name==="Demo.zip");
   assert.deepEqual(Buffer.from(await page.evaluate(()=>window.lastZip.base64),"base64"),original);
   await page.getByRole("button",{name:"Exportovat ZIP",exact:true}).click();
   await page.waitForFunction(()=>window.lastZip?.name==="Demo-upraveny.zip");
   const entries = await openZipWorkspace(Buffer.from(await page.evaluate(()=>window.lastZip.base64),"base64"));
-  assert.equal(entries[0].text,"let a = 43\r\n");
+  assert.equal(entries[0].text,"let a = 44\r\n");
+  const newer = await page.context().newPage();
+  await newer.goto(page.url());
+  await newer.waitForFunction(()=>document.querySelector("textarea")?.value === "let a = 44\n");
+  newer.once("dialog",dialog=>dialog.accept());
+  await newer.locator("#zip-input").setInputFiles({name:"Jiny.zip",mimeType:"application/zip",buffer:dotted});
+  await newer.getByText("Jiny.zip · 1 položek").waitFor();
+  await code.fill("let a = 45\n");
+  await page.locator("#zip-close").click();
+  await page.getByText(/jiném okně/).waitFor();
+  assert(await code.isVisible());
+  assert.equal(await code.inputValue(),"let a = 45\n");
+  await newer.reload();
+  await newer.waitForFunction(()=>document.querySelector("textarea")?.value === "let čaj = 42\n");
 });

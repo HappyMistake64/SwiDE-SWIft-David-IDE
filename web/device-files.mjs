@@ -95,7 +95,7 @@ export function mountDeviceFiles(container, api = globalThis.pocketIDE) {
   const folder = document.createElement("input"); folder.autocapitalize="off"; folder.spellcheck=false;
   folder.placeholder = "Např. Sources nebo Resources/Obrazky"; label.append(folder);
   const hint = document.createElement("p"); hint.className="small muted";
-  hint.textContent = "Vyber Swift, textová data nebo obrázky PNG, JPEG, GIF či WebP. Bez zadané složky se Swift přidá do kořene a textová data a obrázky do Resources. Soubory se stejnou cestou se nepřepisují.";
+  hint.textContent = "Jeden ZIP otevře celý projekt. Jinak vyber Swift, textová data nebo obrázky PNG, JPEG, GIF či WebP. Bez zadané složky se Swift přidá do kořene a textová data a obrázky do Resources. Soubory se stejnou cestou se nepřepisují.";
   const pick = document.createElement("button"); pick.type="button"; pick.textContent="Vybrat soubory…";
   const input = document.createElement("input"); input.type="file"; input.multiple=true; input.hidden=true;
   // Validate after selection so Files can offer Swift and other plain-text extensions from every provider.
@@ -107,6 +107,14 @@ export function mountDeviceFiles(container, api = globalThis.pocketIDE) {
     const selection = Array.from(input.files || []);
     input.value="";
     if (!selection.length || pick.disabled) return;
+    if (selection.some(file => /\.zip$/i.test(file.name))) {
+      if (selection.length !== 1) {
+        status.textContent = "Pro otevření projektu vyber jeden ZIP.";
+        return;
+      }
+      document.dispatchEvent(new CustomEvent("pocket:zip-selected", {detail:{file:selection[0]}}));
+      return;
+    }
     pick.disabled=folder.disabled=true;
     status.textContent="Čtu vybrané soubory…";
     try {

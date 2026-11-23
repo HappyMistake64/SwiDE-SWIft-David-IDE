@@ -34,7 +34,7 @@ sdk_path="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 arch="$(uname -m)"
 xcrun --sdk iphonesimulator clang -target "$arch-apple-ios17.0-simulator" -isysroot "$sdk_path" \
    -fobjc-arc -fmodules -Os pocket-editor/Editor.m tests/wkwebview/SmokeObserver.m \
-   -framework UIKit -framework WebKit -framework Foundation -o "$app/$executable"
+   -framework UIKit -framework WebKit -framework Foundation -framework UniformTypeIdentifiers -o "$app/$executable"
 codesign --force --sign - --timestamp=none "$app"
 
 selection="$(python3 - <<'PY'

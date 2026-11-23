@@ -4,11 +4,20 @@ Created by David Volf.
 
 Mobilní vývojové prostředí pro tvorbu Swift/SwiftUI aplikací z iPhonu s kompilací přes GitHub Actions na vzdáleném Macu.
 
-## Mobilní IDE 0.4.2
+## Mobilní IDE 0.5.0
 
 [Stáhnout aktuální editor](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/releases/latest/download/SwiDe.ipa) · [Rozsah funkcí a rozdíly oproti Xcode](docs/XCODE-PARITA.md)
 
 V navigátoru **Soubory** přidáš tlačítkem **+** jednotlivé soubory z aplikace Soubory na iPhonu. U zdrojového kódu vyber UTF-8 soubor s příponou `.swift`. Můžeš vybrat více souborů najednou. Ve výchozím nastavení se Swift přidá do kořene projektu ve SwiDe a podporované obrázky a datové soubory do `Resources/`. Pokud už některá cesta v projektu existuje, celý výběr se zastaví před zápisem. Projekt ve SwiDe pojme až 200 souborů v celkovém limitu 4 MB včetně zakódovaných prostředků. Pro původní projekt se zachováním uspořádání složek použij import ZIP.
+
+### Otevření a uložení projektu
+
+- **ZIP** vyber přes **+** v navigátoru nebo **ZIP a složky → Otevřít ZIP**.
+- **Celou složku** otevři přes **ZIP a složky → Otevřít složku projektu**. SwiDe z ní vytvoří místní pracovní kopii a zachová hierarchii souborů. Pokud výběr složky prohlížeč nenabídne, v aplikaci Soubory ji zkomprimuj a otevři vzniklý ZIP.
+- **Uložit projekt** uloží změny v zařízení. **Zavřít projekt** jej nejprve uloží. K práci se vrátíš přes **Otevřít poslední projekt**. Pro přenosnou kopii do Souborů použij **Exportovat ZIP**.
+- U projektu vytvořeného přímo ve SwiDe najdeš **Uložit**, **Zavřít** a **Nový projekt** v nabídce se třemi tečkami v navigátoru **Soubory**. Přenosnou kopii vytvoří **Export JSON**.
+
+Editor drží jeden poslední projekt SwiDe a jeden poslední projekt ze ZIPu nebo složky. ZIP může mít nejvýše 20 MiB, 2 000 položek a 50 MiB po rozbalení. Při přímém importu složky platí 20 MiB včetně režie archivu.
 
 V paletě příkazů zvol **Rychle otevřít** a napiš například `ContentView.swift:12`. Nástroje editoru umí přesouvat řádky, měnit velikost písmen a vybírat párové závorky.
 

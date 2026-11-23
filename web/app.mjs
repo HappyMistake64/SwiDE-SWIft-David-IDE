@@ -29,6 +29,7 @@ function syncSettings() {
   persist();
 }
 function saveEditing() {
+  if (window.pocketProjectSession?.isClosed()) return;
   if (!state.active || !(state.active in state.project.files)) return;
   state.project.files[state.active]=byId("code").value;
   persist();
@@ -162,6 +163,7 @@ async function connect() {
   }
 }
 async function submit(capturePreview = false) {
+  if (window.pocketProjectSession?.isClosed()) return;
   if (busy) return;
   busy=true;
   byId("btn-build").disabled=true;
@@ -269,9 +271,8 @@ async function importProject(file) {
     if (!file || file.size>4_000_000) throw Error("Import podporuje JSON do 4 MB.");
     const result=JSON.parse(await file.text());
     validateProject(result);
-    // Only replace after full validation.
-    state.project=result;state.active=Object.keys(result.files)[0];
-    persist();renderFiles();note("Projekt importován bez ztráty historie buildů.","success");
+    window.pocketIDE.commitProject(result,Object.keys(result.files)[0]);
+    note("Projekt importován bez ztráty historie buildů.","success");
   }catch(err){note(errorMessage(err),"error");}
 }
 function addFile() {
@@ -349,10 +350,13 @@ window.pocketIDE = {
     return api;
   },
   getBuilds: () => state.builds,
-  commitProject(project,active) {
+  commitProject(project,active,settingsPatch) {
     validateProject(project);
     if (!Object.hasOwn(project.files,active)) throw Error("Soubor není v projektu.");
-    localStorage.setItem(STORAGE_KEY,JSON.stringify({...state,project,active}));
+    const settings = settingsPatch ? validateSettings({...state.settings,...settingsPatch}) : state.settings;
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({...state,project,active,settings}));
+    state.settings=settings;
+    byId("app-name").value=settings.appName;
     state.project=project;
     state.active=active;
     renderFiles();

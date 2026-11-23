@@ -303,7 +303,9 @@ export function mountZipWorkspace(container) {
     select.disabled = busy || !entries.length;
     save.disabled = originalExport.disabled = busy || !originalFile;
     checkpoint.disabled = close.disabled = busy || !originalFile || !db;
-    reopen.disabled = busy || !closedName || !!originalFile;
+    checkpoint.hidden = close.hidden = save.hidden = originalExport.hidden = !originalFile;
+    reopen.hidden = !closedName || !!originalFile;
+    reopen.disabled = busy || reopen.hidden;
     document.dispatchEvent(new CustomEvent("pocket:zip-state",{detail:{open:!!originalFile,name:archiveName || closedName,busy,canReopen:!reopen.disabled}}));
   }
   const show = () => {

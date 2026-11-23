@@ -69,7 +69,8 @@ test("ZIP survives reloads, rejected imports, and exports the exact original", {
   t.after(()=>new Promise(resolve=>server.close(resolve)));
   const browser = await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH ? {executablePath:process.env.CHROMIUM_PATH} : existsSync("/usr/bin/chromium") ? {executablePath:"/usr/bin/chromium"} : {})});
   t.after(()=>browser.close());
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
   await page.addInitScript(()=>{
     window.webkit = {messageHandlers:{exportWorkspaceZip:{postMessage:msg=>{window.lastZip=msg;}}}};
   });
@@ -104,7 +105,7 @@ test("ZIP survives reloads, rejected imports, and exports the exact original", {
   await page.waitForFunction(()=>window.lastZip?.name==="Demo-upraveny.zip");
   const entries = await openZipWorkspace(Buffer.from(await page.evaluate(()=>window.lastZip.base64),"base64"));
   assert.equal(entries[0].text,"let a = 44\r\n");
-  const newer = await page.context().newPage();
+  const newer = await context.newPage();
   await newer.goto(page.url());
   await newer.waitForFunction(()=>document.querySelector("textarea")?.value === "let a = 44\n");
   newer.once("dialog",dialog=>dialog.accept());
@@ -112,6 +113,7 @@ test("ZIP survives reloads, rejected imports, and exports the exact original", {
   await newer.getByText("Jiny.zip · 1 položek").waitFor();
   await code.fill("let a = 45\n");
   await page.locator("#zip-close").click();
+  await page.locator("#zip-close:enabled").waitFor();
   await page.getByText(/jiném okně/).waitFor();
   assert(await code.isVisible());
   assert.equal(await code.inputValue(),"let a = 45\n");

@@ -98,6 +98,7 @@ test("ZIP survives reloads, rejected imports, and exports the exact original", {
   await input.setInputFiles({name:"bad.zip",mimeType:"application/zip",buffer:Buffer.from("invalid")});
   await page.getByText(/platnou hlavičku/).waitFor();
   assert.equal(await code.inputValue(),"let a = 44\n");
+  await page.getByText("Možnosti archivu",{exact:true}).click();
   await page.getByRole("button",{name:"Exportovat původní ZIP"}).click();
   await page.waitForFunction(()=>window.lastZip?.name==="Demo.zip");
   assert.deepEqual(Buffer.from(await page.evaluate(()=>window.lastZip.base64),"base64"),original);

@@ -4,18 +4,18 @@ Created by David Volf.
 
 Mobilní vývojové prostředí pro tvorbu Swift/SwiftUI aplikací z iPhonu s kompilací přes GitHub Actions na vzdáleném Macu.
 
-## Mobilní IDE 0.5.0
+## Mobilní IDE 0.5.1
 
 [Stáhnout aktuální editor](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/releases/latest/download/SwiDe.ipa) · [Rozsah funkcí a rozdíly oproti Xcode](docs/XCODE-PARITA.md)
 
 V navigátoru **Soubory** přidáš tlačítkem **+** jednotlivé soubory z aplikace Soubory na iPhonu. U zdrojového kódu vyber UTF-8 soubor s příponou `.swift`. Můžeš vybrat více souborů najednou. Ve výchozím nastavení se Swift přidá do kořene projektu ve SwiDe a podporované obrázky a datové soubory do `Resources/`. Pokud už některá cesta v projektu existuje, celý výběr se zastaví před zápisem. Projekt ve SwiDe pojme až 200 souborů v celkovém limitu 4 MB včetně zakódovaných prostředků. Pro původní projekt se zachováním uspořádání složek použij import ZIP.
 
-### Otevření a uložení projektu
+### Každodenní práce
 
-- **ZIP** vyber přes **+** v navigátoru nebo **ZIP a složky → Otevřít ZIP**.
-- **Celou složku** otevři přes **ZIP a složky → Otevřít složku projektu**. SwiDe z ní vytvoří místní pracovní kopii a zachová hierarchii souborů. Pokud výběr složky prohlížeč nenabídne, v aplikaci Soubory ji zkomprimuj a otevři vzniklý ZIP.
-- **Uložit projekt** uloží změny v zařízení. **Zavřít projekt** jej nejprve uloží. K práci se vrátíš přes **Otevřít poslední projekt**. Pro přenosnou kopii do Souborů použij **Exportovat ZIP**.
-- U projektu vytvořeného přímo ve SwiDe najdeš **Uložit**, **Zavřít** a **Nový projekt** v nabídce se třemi tečkami v navigátoru **Soubory**. Přenosnou kopii vytvoří **Export JSON**.
+- Klepni nahoře na **název projektu** a otevři ZIP, složku nebo projekt JSON. Ve stejné nabídce můžeš začít nový projekt SwiDe nebo se vrátit k rozpracovanému.
+- V **Souborech** otevře klepnutí na textový soubor rovnou editor. Přes **Přidat soubory** můžeš připojit další zdrojové soubory nebo otevřít ZIP.
+- Nahoře klepni na **Uložit** nebo **Sestavit**. U otevřeného ZIPu vede sestavení k volbě schématu a výstupu tohoto projektu. Ostatní nástroje jsou pod **Více**.
+- Přes **název projektu → Uložit a zavřít aktuální projekt** uložíš práci a zavřeš otevřený projekt. Pro přenosnou kopii použij **Exportovat ZIP** nebo **Export JSON**.
 
 Editor drží jeden poslední projekt SwiDe a jeden poslední projekt ze ZIPu nebo složky. ZIP může mít nejvýše 20 MiB, 2 000 položek a 50 MiB po rozbalení. Při přímém importu složky platí 20 MiB včetně režie archivu.
 

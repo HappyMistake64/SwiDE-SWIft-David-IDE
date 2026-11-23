@@ -41,9 +41,6 @@ async function chooseDeviceFile(page, name, contents) {
     await assertNoPageOverflow(page);
     assert.equal(await code.isVisible(), false);
     await sourceRow("ContentView.swift").click();
-    assert(await page.locator("#navigator-preview").isVisible());
-    assert.equal(await code.isVisible(), false);
-    await page.locator("#open-selected-file").click();
     await code.waitFor({state:"visible"});
     assert.match(await code.inputValue(), /struct ContentView/);
     await code.fill("import SwiftUI\n// Pocket smoke");
@@ -57,7 +54,6 @@ async function chooseDeviceFile(page, name, contents) {
     await page.waitForFunction(name => window.pocketIDE.getProject().files[name] !== undefined, importedName);
     await projectTab.click();
     await sourceRow(importedName).click();
-    await page.locator("#open-selected-file").click();
     assert.equal(await code.inputValue(), original);
     await projectTab.click();
     const before = await page.evaluate(() => JSON.stringify(window.pocketIDE.getProject()));
@@ -68,6 +64,7 @@ async function chooseDeviceFile(page, name, contents) {
     await page.waitForFunction(() => Boolean(window.pocketIDE));
     assert.equal(await page.evaluate(name => window.pocketIDE.getProject().files[name], importedName), original);
 
+    await page.getByRole("button",{name:"Více",exact:true}).click();
     await page.locator("#palette-open").click();
     await page.locator("#command-query").fill("sestav");
     assert.match(await page.locator("#command-list").innerText(), /sestav/i);
@@ -80,12 +77,19 @@ async function chooseDeviceFile(page, name, contents) {
     assert.equal(cursor[0], cursor[1]);
 
     await page.setViewportSize({width:320,height:640});
-    for (const name of ["project", "code", "preview", "console"]) {
+    assert.deepEqual(await page.locator(".activity-rail button").allTextContents(), ["Soubory","Editor","Sestavení","Více"]);
+    for (const name of ["project", "code", "console"]) {
       const tab = page.locator(`[data-view="${name}"]:visible`).first();
       await tab.click();
       assert(await page.locator(`[data-panel="${name}"]`).isVisible());
       await assertNoPageOverflow(page);
     }
+    await page.locator("#btn-build").click();
+    assert(await page.locator("#connect-token").isVisible());
+    await page.getByRole("button",{name:"Více",exact:true}).click();
+    await page.getByRole("button",{name:"Náhled v simulátoru",exact:true}).click();
+    assert(await page.locator('[data-panel="preview"]').isVisible());
+    await assertNoPageOverflow(page);
     const {exportZipWorkspace} = await import("../web/zip-workspace.mjs");
     const saveSource = "let reopened = 4817\n";
     const zip = exportZipWorkspace([{path:"Sources/Fixture.swift", edit:saveSource, mode:0o644, date:33, time:0}]);
@@ -95,18 +99,24 @@ async function chooseDeviceFile(page, name, contents) {
     await zipCode.waitFor({state:"visible"});
     assert.equal(await zipCode.inputValue(), saveSource);
     await zipCode.fill("let reopened = 4818\n");
-    await page.locator("#zip-save").click();
+    assert.equal(await page.locator("#archive-title").textContent(), "Fixture.zip");
+    await page.locator("#btn-build").click();
+    assert(await page.locator("#zip-build").isVisible());
+    assert.equal(await page.locator("#connect-token").isVisible(),false);
+    assert.equal(await page.locator('[data-view="console"]').getAttribute("aria-current"),"page");
+    await page.locator("#save-current").click();
+    await page.getByText("Projekt byl uložen na tomto zařízení.").waitFor();
     await page.locator("#zip-close").click();
     await page.locator("#zip-reopen").waitFor({state:"visible"});
     await page.reload();
-    await page.getByRole("button",{name:"ZIP a složky"}).click();
     await page.locator("#zip-reopen").click();
     await zipCode.waitFor({state:"visible"});
     assert.equal(await zipCode.inputValue(), "let reopened = 4818\n");
 
-    await projectTab.click();
+    await page.getByRole("button",{name:"Projekty",exact:true}).click();
+    await page.locator("#show-standard-project").click();
     await page.locator("#file-actions").click();
-    await page.getByRole("button",{name:"Uložit, zavřít nebo vytvořit projekt"}).click();
+    await page.getByRole("button",{name:"Uložit nebo zavřít projekt SwiDe"}).click();
     await page.locator("#project-session").getByRole("button",{name:"Uložit projekt"}).click();
     await page.locator("#project-session").getByRole("button",{name:"Zavřít projekt"}).click();
     await page.locator("#project-start-screen").waitFor({state:"visible"});

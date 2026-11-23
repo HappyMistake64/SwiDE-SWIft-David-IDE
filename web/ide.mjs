@@ -5,6 +5,9 @@
   const editor = id("code");
   const checkpointKey = "pocket-ide-checkpoint-v1";
   const panelKey = "pocket-ide-panel-v1";
+  const projectModeKey = "swide-project-mode-v1";
+  let archiveMode = false, archiveState = {open:false,name:""};
+  try { archiveMode = localStorage.getItem(projectModeKey) === "archive"; } catch {}
   const folded = new Set();
   let paletteIndex = 0;
   let paletteMode = "commands";
@@ -49,13 +52,66 @@
       panel.classList.toggle("active", active);
     }
     for (const control of document.querySelectorAll(".activity-rail button")) {
-      const active = railCommand ? control.dataset.command === railCommand : control.dataset.view === name;
+      const primaryView = name === "preview" ? "console" : name;
+      const active = railCommand ? control.dataset.command === railCommand || control.dataset.view === railCommand
+        : control.dataset.view === primaryView;
       if (active) control.setAttribute("aria-current", "page");
       else control.removeAttribute("aria-current");
       control.classList.toggle("active", active);
     }
     try { localStorage.setItem(panelKey, name); } catch {}
   }
+  function projectTitle() {
+    document.body.dataset.projectMode = archiveMode ? "archive" : "swide";
+    id("ide-title").hidden = archiveMode;
+    id("archive-title").hidden = !archiveMode;
+    id("archive-title").textContent = archiveState.name || "ZIP nebo složka";
+    id("project-kind").textContent = archiveMode ? "Projekt ze ZIPu nebo složky" : "Projekt SwiDe";
+    const archiveUnavailable = archiveMode && (!archiveState.open || archiveState.busy);
+    id("save-current").disabled = id("close-current").disabled = archiveUnavailable;
+  }
+  function setProjectMode(archive) {
+    archiveMode = archive;
+    projectTitle();
+    try { localStorage.setItem(projectModeKey, archive ? "archive" : "swide"); } catch {}
+  }
+  function showMenu(topic) {
+    selectPanel("project", topic, "tools");
+    id(topic+"-title").focus();
+  }
+  function showArchive(tab = "project") {
+    setProjectMode(true);
+    selectPanel("project","zip",tab);
+    const target = {
+      project:"zip-workspace",
+      code:"zip-editor",
+      console:"zip-build"
+    }[tab];
+    const section = id(target);
+    if (section && !section.hidden) {
+      section.scrollIntoView({block:"start"});
+      section.focus({preventScroll:true});
+    }
+  }
+  function navigate(name) {
+    if (archiveMode && ["project","code","console","preview"].includes(name)) {
+      showArchive(name === "preview" ? "console" : name);
+      return;
+    }
+    selectPanel(name);
+  }
+  document.addEventListener("pocket:zip-state", event => {
+    archiveState = event.detail;
+    projectTitle();
+  });
+  document.addEventListener("pocket:show-standard", () => {
+    setProjectMode(false);
+    selectPanel("project");
+  });
+  document.addEventListener("pocket:project-feedback", event => {
+    if (archiveMode) return;
+    id("project-kind").textContent = event.detail.message;
+  });
   function button(label, action, className) {
     const item = document.createElement("button");
     item.type = "button";
@@ -66,7 +122,7 @@
   }
   function showCode() {
     const panel = editor.closest("[data-view-panel],[data-panel]");
-    if (panel) selectPanel(panel.dataset.viewPanel || panel.dataset.panel);
+    if (panel) { setProjectMode(false); selectPanel(panel.dataset.viewPanel || panel.dataset.panel); }
   }
   function selectRange(start, end) {
     showCode();
@@ -92,42 +148,16 @@
   }
   let selectedPath = "", lastActive = "", treeExpanded = true;
   function renderPeek() {
-    const p = api().getProject(), path = selectedPath;
-    const text = p.files[path], image = p.binaries?.[path];
-    id("navigator-preview").hidden = typeof text !== "string" && !image;
-    id("open-selected-file").hidden = typeof text !== "string";
-    const code = id("peek-code"); code.replaceChildren();
-    const file = path.split("/").pop();
-    id("peek-name").textContent = file;
-    if (typeof text === "string") {
-      const lines = text.split("\n");
-      const declaration = /^(?:\s*(?:public|private|final|indirect)\s+)*\s*(?:struct|class|enum|actor|func|protocol|extension)\s/u;
-      const first = Math.max(0, lines.findIndex(line => declaration.test(line)));
-      id("peek-name").textContent = file + ":" + (first + 1);
-      id("open-selected-file").onclick = () => {
-        const offset = first ? lines.slice(0, first).join("\n").length + 1 : 0;
-        open(path, offset, offset);
-      };
-      for (let i = first; i < Math.min(first + 3, lines.length); i++) {
-        const row = document.createElement("div"), num = document.createElement("span"), line = document.createElement("code");
-        num.className = "peek-number";num.textContent = String(i + 1);
-        const raw = lines[i].slice(0, 260);
-        if (/\.swift$/i.test(path)) {
-          const tokens = /("(?:\\.|[^"\\])*"|\/\/.*|\b(?:struct|class|func|var|let|some|import|return|private|public|enum|actor|protocol|extension)\b|\b[A-Z][\w]*\b|\b\d+\b)/gu;
-          let start=0;
-          for (const match of raw.matchAll(tokens)) {
-            line.append(document.createTextNode(raw.slice(start,match.index)));
-            const token = document.createElement("span"), value = match[0];
-            token.className = "tok-" + (value[0] === '"' ? "string" : value.startsWith("//") ? "comment" : /^\d/u.test(value) ? "number" : /^[A-Z]/u.test(value) ? "type" : "keyword");
-            token.textContent=value; line.append(token); start=match.index+value.length;
-          }
-          line.append(document.createTextNode(raw.slice(start)));
-        } else line.textContent = raw;
-        row.append(num, line); code.append(row);
-      }
-    } else if (image) {
+    const path = selectedPath, image = api().getProject().binaries?.[path];
+    id("navigator-preview").hidden = !image;
+    id("peek-name").textContent = path.split("/").pop();
+    const preview = id("peek-code");
+    preview.replaceChildren();
+    if (image) {
       const img = document.createElement("img");
-      img.alt = file; img.src = "data:" + image.mime + ";base64," + image.base64; code.append(img);
+      img.alt = path.split("/").pop();
+      img.src = "data:" + image.mime + ";base64," + image.base64;
+      preview.append(img);
     }
   }
   function renderTree() {
@@ -176,6 +206,10 @@
           }
         } else {
           const item = button(name, () => {
+            if (Object.hasOwn(project.files,value)) {
+              try { open(value); } catch (error) { report(error.message, true); }
+              return;
+            }
             selectedPath = value;
             for (const file of root.querySelectorAll("[data-path]")) {
               file.classList.toggle("active", file === item);
@@ -292,7 +326,7 @@
     const control = id(key);
     const panel = control.closest("[data-view-panel],[data-panel]");
     if (panel) {
-      const map = {"project-search":"project-search", "connect-token":"connection"};
+      const map = {"project-search":"tools", "connect-token":"tools"};
       selectPanel(panel.dataset.viewPanel || panel.dataset.panel, control.closest("[data-topic]")?.dataset.topic, map[key]);
     }
     const details = control.closest("details");
@@ -303,9 +337,10 @@
     const box=id(key);
     const panel=box.closest("[data-panel]");
     if (panel) {
-      const map = {"source-control":"diff", issues:"issues", "zip-workspace":"original"};
+      const map = {"source-control":"tools", issues:"console", "debug-report":"console"};
       selectPanel(panel.dataset.panel,box.closest("[data-topic]")?.dataset.topic,map[key]);
     }
+    if (key === "issues" || key === "debug-report") id("build-diagnostics").open = true;
     const control=box.querySelector("button:not(:disabled),input:not(:disabled),select:not(:disabled),summary") || box;
     let section=control.closest("details");
     while (section) {
@@ -316,20 +351,30 @@
     box.scrollIntoView({block:"nearest"});
   }
   const definitions = {
+    "projects":["Otevřít nebo přepnout projekt",()=>showMenu("projects")],
+    "tools":["Další nástroje",()=>showMenu("tools")],
+    "standard-project":["Aktuální projekt SwiDe",()=>document.dispatchEvent(new Event("pocket:show-standard"))],
+    "new-project":["Nový projekt SwiDe",()=>window.pocketProjectSession.newProject()],
+    "preview":["Náhled v simulátoru",()=>navigate("preview")],
     "snapshots":["Import, export a kontrolní bod projektu",()=>revealTool("snapshots")],
     "device":["Přidat jednotlivé soubory",()=>revealTool("device-files")],
     "session":["Uložit, zavřít nebo vytvořit projekt",()=>revealTool("project-session")],
     "save-project":["Uložit projekt v zařízení",()=>{
-      revealTool("project-session");
-      window.pocketProjectSession.save();
+      if (archiveMode) {
+        showArchive();
+        id("zip-save").click();
+      } else window.pocketProjectSession.save();
     }],
-    "close-project":["Uložit a zavřít projekt",()=>window.pocketProjectSession.close()],
+    "close-project":["Uložit a zavřít projekt",()=>{
+      if (archiveMode) { showArchive(); id("zip-close").click(); }
+      else window.pocketProjectSession.close();
+    }],
     "open-zip":["Otevřít ZIP",()=>{
-      revealTool("zip-workspace");
+      showArchive();
       document.dispatchEvent(new Event("pocket:pick-zip"));
     }],
     "open-folder":["Otevřít složku",()=>{
-      revealTool("zip-workspace");
+      showArchive();
       document.dispatchEvent(new Event("pocket:pick-folder"));
     }],
     "assets":["Spravovat obrázky a imagesety",()=>revealTool("assets")],
@@ -337,8 +382,8 @@
     "editor-tools":["Šablony, skládání kódu a přesun souboru",()=>revealTool("editor-tools")],
     "diff":["Zobrazit změny zdrojových souborů",()=>revealTool("source-control")],
     "debug-report":["Zobrazit zásobník a proměnné LLDB",()=>revealTool("debug-report")],
-    "issues":["Diagnostika kompilátoru a výsledky testů",()=>revealTool("issues")],
-    "original":["Otevřít nebo sestavit původní ZIP projekt",()=>revealTool("zip-workspace")],
+    "issues":["Diagnostika kompilátoru a výsledky testů",()=>{if (archiveMode) showArchive("console"); else revealTool("issues");}],
+    "original":["Projekt ze ZIPu nebo složky",()=>showArchive()],
     "open-quickly":["Rychle otevřít soubor podle názvu nebo cesty", () => invokePalette("files")],
     "project-search":["Hledat v projektu", () => focusControl("project-search")],
     "find":["Hledat v souboru", () => focusControl("find-text")],
@@ -348,11 +393,11 @@
     "goto-line":["Přejít na řádek", goToLine],
     "checkpoint":["Uložit kontrolní bod", checkpoint],
     "restore":["Obnovit kontrolní bod", restore],
-    "review":["Zkontrolovat projekt", () => {selectPanel("console"); api().review();}],
+    "review":["Zkontrolovat projekt", () => {if (archiveMode) showArchive("console"); else {selectPanel("console"); api().review();}}],
     "build":["Sestavit aplikaci", () => id("btn-build").click()],
     "refresh":["Obnovit běhy", () => { selectPanel("console"); id("btn-refresh").click(); }],
     "export":["Exportovat projekt", () => id("btn-export").click()],
-    "import":["Importovat projekt", () => id("btn-import").click()],
+    "import":["Otevřít projekt JSON", () => window.pocketProjectSession.openJSON()],
     "add":["Nový soubor", () => id("btn-add").click()],
     "remove":["Odstranit soubor", () => id("btn-remove").click()],
     "symbol":["Přejít na symbol", () => focusControl("symbol-outline")],
@@ -365,15 +410,8 @@
       control.click();
     }];
   }
-  id("btn-build").addEventListener("click", () => {
-    if (id("connection").dataset.connected === "true") selectPanel("console");
-    else {
-      focusControl("connect-token");
-      const hint = id("connection-status");
-      hint.textContent = "Pro sestavení připoj GitHub tokenem a znovu klepni na Sestavit.";
-      hint.dataset.type = "info";
-    }
-  }, {capture:true});
+  document.addEventListener("pocket:github-required", () => focusControl("connect-token"));
+  document.addEventListener("pocket:show-build", () => showArchive("console"));
   function run(key) {
     try { definitions[key]?.[1](); } catch (error) { report(error.message || String(error), true); }
   }
@@ -440,9 +478,9 @@
   document.addEventListener("click", e => {
     const control = e.target.closest("[data-command], [data-view], #palette-open");
     if (!control) return;
-    if (control.dataset.view) selectPanel(control.dataset.view);
+    if (control.dataset.view) navigate(control.dataset.view);
     const command = control.dataset.command;
-    if (control.id === "palette-open" || command === "palette") invokePalette();
+    if (command === "palette") invokePalette();
     else if (command === "close-palette") closePalette();
     else if (command && !["btn-build","btn-refresh","btn-export","btn-import","btn-add"].includes(control.id)) run(command);
   });
@@ -466,12 +504,18 @@
     else if (e.key === "Escape" && dialog.open) { e.preventDefault(); closePalette(); }
   });
   id("btn-device-import").addEventListener("click", () => {
-    selectPanel("project", "device");
+    id("file-feedback").hidden = true;
     document.dispatchEvent(new Event("pocket:import-files"));
   });
   document.addEventListener("pocket:zip-selected", event => {
-    revealTool("zip-workspace");
+    showArchive();
     document.dispatchEvent(new CustomEvent("pocket:open-zip", {detail:{file:event.detail.file}}));
+  });
+  document.addEventListener("pocket:device-status", event => {
+    const feedback = id("file-feedback");
+    feedback.hidden = false;
+    feedback.textContent = event.detail.message;
+    feedback.dataset.type = event.detail.error ? "error" : "info";
   });
   document.addEventListener("pocket:device-imported", event => {
     const path = event.detail?.paths?.[0], project = api().getProject();
@@ -503,5 +547,6 @@
   render();
   let initial = "";
   try { initial = localStorage.getItem(panelKey) || ""; } catch {}
-  selectPanel(["project","code","preview","console"].includes(initial) ? initial : "project");
+  projectTitle();
+  navigate(["project","code","preview","console"].includes(initial) ? initial : "project");
 })();

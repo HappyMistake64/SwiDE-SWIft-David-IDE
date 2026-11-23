@@ -118,6 +118,7 @@ export function mountOriginalRun(container,getWorkspace) {
     return node;
   };
   const group=el("section"), title=el("h3","Sestavit původní projekt"), label=el("label","Sdílené schéma ");
+  group.id = "zip-build"; group.tabIndex = -1;
   const choices=el("select"); label.append(choices);
   const action=el("select"), actionLabel=el("label","Výstup ");
   for (const [id,text] of [["device","IPA pro iPhone"],["simulator","Spustit v simulátoru a zachytit výsledek"]]) {
@@ -167,7 +168,13 @@ export function mountOriginalRun(container,getWorkspace) {
     busy=true;enable();
     let committed=false;
     try {
-      const session=api();requireValue(session,"Nejdřív připoj GitHub v nastavení.");
+      let session;
+      try { session=api(); }
+      catch (error) {
+        document.dispatchEvent(new Event("pocket:github-required"));
+        throw error;
+      }
+      requireValue(session,"Nejdřív připoj GitHub v nastavení.");
       const {entries,pack}=getWorkspace(), choice=options[Number(choices.value)], mode=action.value;
       checkOriginalBuild(entries,choice);
       const archive=pack();

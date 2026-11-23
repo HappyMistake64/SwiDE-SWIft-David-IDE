@@ -48,6 +48,12 @@ function renderFiles() {
   document.dispatchEvent(new Event("pocket:fileloaded"));
   window.dispatchEvent(new Event("pocket-render"));
 }
+const buildStatus = {
+  prepared:"Připravuji", committed:"Uloženo na GitHubu", dispatched:"Odesláno", queued:"Ve frontě",
+  in_progress:"Probíhá", running:"Probíhá", success:"Hotovo", failed:"Selhalo",
+  awaiting:"Čeká na GitHub", missing:"Chybí výstup", mismatch:"Výsledek nesouhlasí",
+  ambiguous:"Více možných výsledků", submission_uncertain:"Odeslání je třeba ověřit", snapshot_failed:"Odeslání selhalo"
+};
 function renderBuilds() {
   window.dispatchEvent(new Event("pocket-builds"));
   const wrapper=byId("builds");
@@ -61,16 +67,18 @@ function renderBuilds() {
   for (const item of state.builds) {
     const box=htmlEl("article","build-card");
     const title=htmlEl("div","build-title");
-    title.append(htmlEl("strong","",item.appName+" · "+item.stage));
+    title.append(htmlEl("strong","",item.appName+" · "+(buildStatus[item.stage] || item.stage)));
     title.append(htmlEl("span","muted",new Date(item.created_at).toLocaleString("cs-CZ")));
-    box.append(title,htmlEl("div","mono",item.request_id));
-    if (item.source_sha) box.append(htmlEl("div","small mono","Commit "+item.source_sha.slice(0,12)));
+    box.append(title);
+    const details=htmlEl("details","build-metadata");
+    details.append(htmlEl("summary","","Podrobnosti"), htmlEl("div","mono","Požadavek "+item.request_id));
+    if (item.source_sha) details.append(htmlEl("div","mono","Commit "+item.source_sha.slice(0,12)));
+    if (item.run_id) details.append(htmlEl("div","mono","GitHub Actions #"+item.run_id));
     if (item.message) box.append(htmlEl("p","small",item.message));
-    if (item.run_id) box.append(htmlEl("div","small","Workflow run #"+item.run_id));
     if (Array.isArray(item.artifacts)&&item.artifacts.length) {
       const list=htmlEl("div","chips");
       for (const a of item.artifacts) list.append(htmlEl("span","chip",a.name));
-      box.append(list);
+      details.append(list);
     }
     const actions=htmlEl("div","action-row");
     const refresh=htmlEl("button","secondary","↻ Ověřit");
@@ -111,7 +119,7 @@ function renderBuilds() {
       link.target="_blank";link.rel="noopener noreferrer";
       actions.append(link);
     }
-    box.append(actions);
+    box.append(actions,details);
     wrapper.append(box);
   }
 }
@@ -164,15 +172,16 @@ async function connect() {
 }
 async function submit(capturePreview = false) {
   if (window.pocketProjectSession?.isClosed()) return;
+  if (document.body.dataset.projectMode === "archive") {
+    document.dispatchEvent(new Event("pocket:show-build"));
+    return;
+  }
   if (busy) return;
   busy=true;
   byId("btn-build").disabled=true;
   try {
     if (!api) {
-      document.querySelector('.activity-rail [data-command="connection"]').click();
-      const settings = byId("connect-token").closest("details");
-      if (settings) settings.open = true;
-      byId("connect-token").focus();
+      document.dispatchEvent(new Event("pocket:github-required"));
       throw Error("Pro vzdálené sestavení nejdřív připoj GitHub.");
     }
     saveEditing();syncSettings();validateProject(state.project);

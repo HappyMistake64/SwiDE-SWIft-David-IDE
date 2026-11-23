@@ -28,7 +28,7 @@ try {
   window.pocketIDE.openFile(other); window.pocketIDE.openFile(name);
   assert(code.value.endsWith(marker), "Edit lost switching files");
 
-  document.querySelector('[data-view="project"]').click();
+  id("btn-build").click();
   const field = id("connect-token"), connected = id("connection");
   if (field.closest("details")) field.closest("details").open = true;
   field.scrollIntoView({block:"center"});
@@ -91,11 +91,11 @@ try {
   document.querySelector('[data-view="project"]').click();
   assert(row(), "Imported Swift file missing from navigator");
   row().click();
-  id("open-selected-file").click();
   code.scrollIntoView({block:"center"});
   assert(visible(code) && code.value === importedSource, "Navigator did not open the imported Swift source");
   document.querySelector('[data-view="project"]').click();
-  row().click();
+  document.querySelector('.topbar [data-command="projects"]').click();
+  id("show-archive-project").click();
   document.activeElement?.blur();
   window.scrollTo(0, 0);
   const zip = id("zip-workspace"), folder = id("zip-pick-folder");

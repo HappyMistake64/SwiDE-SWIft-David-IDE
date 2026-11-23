@@ -143,3 +143,33 @@ body[data-project-topic="files"] .project{height:100%;max-width:none}
 }
 @media(max-width:350px){:root{--rail-width:44px}.activity-rail{padding-inline:1px}.activity-rail button{width:40px}.topbar{padding-inline:6px}.navigator-filter{margin-inline:8px}.tree-scroll{padding-inline:3px}.workspace .file-picker{max-width:57%}.peek-heading{align-items:flex-start;flex-direction:column;gap:0;padding-top:4px}}
 @media(max-height:550px){.activity-rail{gap:0}.activity-rail button{min-height:40px;height:40px}#peek-code>div:nth-child(n+3){display:none}.browser-heading{padding-block:0}.navigator-filter{margin-block:1px 3px}}
+
+/* Primary navigation stays labelled at phone widths. */
+body{grid-template-columns:minmax(0,1fr);grid-template-rows:60px minmax(0,1fr) auto}
+.topbar{grid-area:1/1;min-width:0;padding:6px 12px}
+.identity,.titles{min-width:0}
+.titles button{min-height:32px;max-width:min(52vw,480px)}
+.titles strong{min-width:0}
+.head-actions{gap:4px}
+.topbar .head-actions button,#btn-device-import{display:flex;align-items:center;justify-content:center;gap:5px;padding:0 9px;font-size:13px;min-height:44px}
+#btn-build{background:#174778;color:#f2f7ff;border-radius:8px}
+#btn-build svg{width:15px;height:15px}
+#save-current{color:var(--blue)}
+.activity-rail{grid-area:3/1;flex-direction:row;justify-content:space-around;gap:0;overflow:visible;padding:2px 5px;border-right:0;border-top:1px solid var(--edge)}
+.activity-rail button,.activity-rail button:last-child{margin:0;flex:1;min-width:0;min-height:50px;height:auto;flex-direction:column;gap:3px;padding:3px;color:var(--muted)}
+.activity-rail button span{display:inline;font-size:11px}
+.activity-rail button svg{width:18px;height:18px}
+.activity-rail button.active{color:#8dc6ff;background:#232e40}
+.layout{grid-area:2/1}
+.simple-menu{max-width:520px;display:grid;gap:14px;margin:0 auto}
+.simple-menu h2{font-size:15px;color:var(--muted);margin-top:5px}
+.menu-choices{display:grid;gap:5px}
+.simple-menu button,.zip-actions button{min-height:44px;text-align:left}
+.workspace-feedback{padding:6px 12px;color:#9bd9ad;font-size:13px}
+.workspace-feedback[data-type=error]{color:#ffaaa9}
+.zip-actions{display:flex;flex-wrap:wrap;gap:8px}
+#zip-workspace [role=status]{min-height:1.4em}
+@media(max-width:350px){.topbar{padding-inline:7px}.titles button strong{font-size:16px}.titles button{max-width:49vw}#btn-build svg{display:none}.head-actions{gap:2px}.topbar .head-actions button{padding-inline:7px}}
+.build-metadata{margin-top:8px;font-size:13px;color:var(--muted)}
+.build-metadata summary{padding:5px 0;cursor:pointer}
+#project-kind{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

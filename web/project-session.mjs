@@ -94,7 +94,10 @@ export function mountProjectSession(root, api, storage) {
   const picker = element("input");
   picker.type = "file"; picker.accept = ".json,application/json"; picker.hidden = true;
   document.body.append(start, picker);
-  const feedback = text => { (session.isClosed() ? closedMessage : activeMessage).textContent = text; };
+  const feedback = message => {
+    (session.isClosed() ? closedMessage : activeMessage).textContent = message;
+    if (!session.isClosed()) document.dispatchEvent(new CustomEvent("pocket:project-feedback", {detail:{message}}));
+  };
   function update(focus) {
     const closed = session.isClosed();
     for (const area of shell) area.hidden = closed;
@@ -106,7 +109,8 @@ export function mountProjectSession(root, api, storage) {
       if (focus) heading.focus();
     } else if (focus) {
       const files = document.querySelector('.activity-rail [data-view="project"]');
-      files?.click(); files?.focus();
+      document.dispatchEvent(new Event("pocket:show-standard"));
+      files?.focus();
     }
   }
   function run(fn) {
@@ -121,6 +125,7 @@ export function mountProjectSession(root, api, storage) {
     save: () => run(() => {
       const draft = session.save();
       feedback("Projekt " + draft.settings.appName + " je uložen v tomto zařízení.");
+
     }),
     close: () => run(() => {
       if (session.isClosed()) return;
@@ -146,7 +151,7 @@ export function mountProjectSession(root, api, storage) {
         session.reopen();
         update(false);
       }
-      document.querySelector('.activity-rail [data-command="original"]').click();
+      document.getElementById("show-archive-project")?.click();
     })
   };
   picker.addEventListener("change", async () => {

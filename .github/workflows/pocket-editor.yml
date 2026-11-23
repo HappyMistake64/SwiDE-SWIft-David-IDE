@@ -55,5 +55,5 @@ jobs:
           cmp SwiDe.ipa Xcode-Pocket-Editor.ipa
           gh release create "pocket-editor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" SwiDe.ipa Xcode-Pocket-Editor.ipa \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
-            --title "SwiDe 0.5.0 · build $GITHUB_RUN_NUMBER" \
-            --notes 'Otevření projektu přímo ze ZIPu nebo složky. Lokální uložení, zavření a opětovné otevření projektu. Stáhni SwiDe.ipa pro SideStore.'
+            --title "SwiDe 0.5.1 · build $GITHUB_RUN_NUMBER" \
+            --notes 'Jednodušší navigace, přímé otevření souboru, viditelné uložení a sestavení správného projektu. Stáhni SwiDe.ipa pro SideStore.'

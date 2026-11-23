@@ -56,29 +56,67 @@ THE SOFTWARE.
 <symbol id="ico-photo" viewBox="0 0 16 16"><path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3"/><path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 2 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2M14 2H4a1 1 0 0 0-1 1h9.002a2 2 0 0 1 2 2v7A1 1 0 0 0 15 11V3a1 1 0 0 0-1-1M2.002 4a1 1 0 0 0-1 1v8l2.646-2.354a.5.5 0 0 1 .63-.062l2.66 1.773 3.71-3.71a.5.5 0 0 1 .577-.094l1.777 1.947V5a1 1 0 0 0-1-1z"/></symbol>
   </svg>
   <header class="topbar">
-    <div class="identity"><div class="titles"><button type="button" data-command="connection" aria-label="Nastavení projektu"><strong id="ide-title">PocketApp</strong><svg aria-hidden="true"><use href="#ico-down"/></svg></button><span class="build-destination"><svg aria-hidden="true"><use href="#ico-preview"/></svg> SwiDe · vzdálený Mac</span></div></div>
-    <div class="head-actions"><button id="palette-open" type="button" data-command="palette" class="command-button" aria-label="Paleta příkazů" title="Paleta příkazů">⌘</button><button id="btn-build" type="button" aria-label="Sestavit aplikaci" title="Sestavit aplikaci"><svg aria-hidden="true"><use href="#ico-play"/></svg></button></div>
+    <div class="identity">
+      <div class="titles">
+        <button type="button" data-command="projects" aria-label="Projekty"><strong id="ide-title">PocketApp</strong><strong id="archive-title" hidden>ZIP nebo složka</strong><svg aria-hidden="true"><use href="#ico-down"/></svg></button>
+        <span id="project-kind" class="build-destination" role="status">Projekt SwiDe</span>
+      </div>
+    </div>
+    <div class="head-actions">
+      <button type="button" id="save-current" data-command="save-project">Uložit</button>
+      <button type="button" id="btn-build"><svg aria-hidden="true"><use href="#ico-play"/></svg><span>Sestavit</span></button>
+    </div>
   </header>
   <nav class="activity-rail" aria-label="Pracovní prostor SwiDe">
-    <button type="button" data-view="project" aria-label="Soubory" title="Soubory"><svg aria-hidden="true"><use href="#ico-doc"/></svg><span>Soubory</span></button>
-    <button type="button" data-command="project-search" aria-label="Hledat v projektu" title="Hledat v projektu"><svg aria-hidden="true"><use href="#ico-find"/></svg><span>Hledat v projektu</span></button>
-    <button type="button" data-command="diff" aria-label="Správa verzí" title="Správa verzí"><svg aria-hidden="true"><use href="#ico-git"/></svg><span>Správa verzí</span></button>
-    <button type="button" data-command="issues" aria-label="Diagnostika a testy" title="Diagnostika a testy"><svg aria-hidden="true"><use href="#ico-issues"/></svg><span>Diagnostika a testy</span></button>
-    <button type="button" data-view="code" aria-label="Editor" title="Editor"><svg aria-hidden="true"><use href="#ico-code"/></svg><span>Editor</span></button>
-    <button type="button" data-view="preview" aria-label="Náhled" title="Náhled"><svg aria-hidden="true"><use href="#ico-preview"/></svg><span>Náhled</span></button>
-    <button type="button" data-view="console" aria-label="Konzole" title="Konzole"><svg aria-hidden="true"><use href="#ico-console"/></svg><span>Konzole</span></button>
-    <button type="button" data-command="original" aria-label="ZIP a složky" title="ZIP a složky"><svg aria-hidden="true"><use href="#ico-package"/></svg><span>ZIP a složky</span></button>
-    <button type="button" data-command="connection" aria-label="Nastavení" title="Nastavení"><svg aria-hidden="true"><use href="#ico-settings"/></svg><span>Nastavení</span></button>
+    <button type="button" data-view="project"><svg aria-hidden="true"><use href="#ico-doc"/></svg><span>Soubory</span></button>
+    <button type="button" data-view="code"><svg aria-hidden="true"><use href="#ico-code"/></svg><span>Editor</span></button>
+    <button type="button" data-view="console"><svg aria-hidden="true"><use href="#ico-play"/></svg><span>Sestavení</span></button>
+    <button type="button" data-command="tools"><svg aria-hidden="true"><use href="#ico-more"/></svg><span>Více</span></button>
   </nav>
   <main class="layout">
     <section class="panel project" data-panel="project" data-view-panel="project">
+      <section data-topic="projects" class="simple-menu" hidden aria-labelledby="projects-title">
+        <h1 id="projects-title" tabindex="-1">Projekty</h1>
+        <div class="menu-choices">
+          <button type="button" id="show-standard-project" data-command="standard-project">Aktuální projekt SwiDe</button>
+          <button type="button" id="show-archive-project" data-command="original">Projekt ze ZIPu nebo složky</button>
+        </div>
+        <h2>Otevřít ze Souborů</h2>
+        <div class="menu-choices">
+          <button type="button" data-command="open-zip">Otevřít ZIP</button>
+          <button type="button" data-command="open-folder">Otevřít složku</button>
+          <button type="button" data-command="import">Otevřít projekt JSON</button>
+        </div>
+        <div class="menu-choices">
+          <button type="button" data-command="new-project">Nový projekt SwiDe</button>
+          <button type="button" id="close-current" data-command="close-project">Uložit a zavřít aktuální projekt</button>
+        </div>
+      </section>
+      <section data-topic="tools" class="simple-menu" hidden aria-labelledby="tools-title">
+        <h1 id="tools-title" tabindex="-1">Více</h1>
+        <div class="menu-choices">
+          <button type="button" data-command="connection">Nastavení a GitHub</button>
+          <button type="button" id="palette-open" data-command="palette">Paleta příkazů</button>
+          <button type="button" data-command="preview">Náhled v simulátoru</button>
+          <button type="button" data-command="issues">Diagnostika a testy</button>
+          <button type="button" data-command="project-search">Hledat v projektu SwiDe</button>
+          <button type="button" data-command="diff">Správa verzí</button>
+        </div>
+      </section>
       <div data-topic="files" class="browser-files">
-        <div class="browser-heading"><h1>Soubory</h1><div class="head-actions"><button type="button" id="btn-device-import" class="glyph-button" title="Přidat soubory z iPhonu" aria-label="Přidat soubory z iPhonu"><svg aria-hidden="true"><use href="#ico-plus"/></svg></button><button type="button" id="file-actions" class="glyph-button" title="Další akce projektu" aria-label="Další akce projektu" aria-expanded="false" aria-controls="file-actions-menu"><svg aria-hidden="true"><use href="#ico-more"/></svg></button></div></div>
-        <div id="file-actions-menu" class="file-actions-menu" hidden><button type="button" id="btn-add">Nový soubor</button><button type="button" data-command="device">Přidat jednotlivé soubory</button><button type="button" data-command="assets">Obrázky a asset katalog</button><button type="button" data-command="open-zip">Otevřít ZIP</button><button type="button" data-command="open-folder">Otevřít složku</button><button type="button" data-command="session">Uložit, zavřít nebo vytvořit projekt</button><button type="button" data-command="snapshots">Import, export a kontrolní bod</button><button type="button" id="btn-remove">Odstranit otevřený soubor</button></div>
+        <div class="browser-heading"><h1>Soubory</h1><div class="head-actions"><button type="button" id="btn-device-import" class="glyph-button" title="Přidat soubory z iPhonu" aria-label="Přidat soubory z iPhonu"><svg aria-hidden="true"><use href="#ico-plus"/></svg><span>Přidat soubory</span></button><button type="button" id="file-actions" class="glyph-button" title="Možnosti souborů" aria-label="Možnosti souborů" aria-expanded="false" aria-controls="file-actions-menu"><svg aria-hidden="true"><use href="#ico-more"/></svg></button></div></div>
+        <div id="file-actions-menu" class="file-actions-menu" hidden>
+          <button type="button" id="btn-add">Nový soubor</button>
+          <button type="button" data-command="device">Import do vybrané složky</button>
+          <button type="button" data-command="assets">Obrázky a asset katalog</button>
+          <button type="button" data-command="session">Uložit nebo zavřít projekt SwiDe</button>
+          <button type="button" data-command="snapshots">Exportovat projekt a kontrolní body</button>
+          <button type="button" id="btn-remove">Odstranit otevřený soubor</button>
+        </div>
         <label class="navigator-filter"><svg aria-hidden="true"><use href="#ico-find"/></svg><input id="ide-filter" aria-label="Najít soubor" type="search" placeholder="Najít soubor" autocapitalize="off" autocomplete="off"></label>
         <div class="tree-scroll"><button type="button" id="tree-root" aria-expanded="true"><svg aria-hidden="true"><use href="#ico-down"/></svg> <svg aria-hidden="true"><use href="#ico-projectmark"/></svg> <span id="tree-root-title">PocketApp</span></button><div id="tree" aria-label="Soubory projektu"></div></div>
-        <section id="navigator-preview" aria-label="Vybraný soubor"><div class="peek-heading"><span id="peek-name"></span><button id="open-selected-file" type="button">Otevřít v editoru ›</button></div><div id="peek-code"></div></section>
-        <button type="button" class="branch-foot" data-command="diff"><svg aria-hidden="true"><use href="#ico-git"/></svg> main <svg aria-hidden="true"><use href="#ico-down"/></svg></button>
+        <section id="navigator-preview" aria-label="Vybraný soubor"><div class="peek-heading"><span id="peek-name"></span></div><div id="peek-code"></div></section>
+        <p id="file-feedback" class="workspace-feedback" role="status" hidden></p>
       </div>
       <div id="device-files" data-topic="device" hidden></div>
       <div id="project-session" class="project-tool" data-topic="session" hidden></div>
@@ -129,8 +167,10 @@ THE SOFTWARE.
       <div class="panel-heading"><h1>Náhled</h1></div>
       <p>Sestav aktuální projekt ve SwiDe na vzdáleném Macu a zachyť první obrazovku aplikace v simulátoru iPhonu.</p>
       <label class="field">Vzhled simulátoru<select id="preview-appearance"><option value="default">Výchozí</option><option value="light">Světlý</option><option value="dark">Tmavý</option><option value="both">Světlý i tmavý snímek</option></select></label>
+      <details class="group"><summary>Pokročilé nastavení náhledu</summary><div class="group-body">
       <label class="field">Volitelný bod zastavení LLDB<input id="debug-at" placeholder="ContentView.swift:12" autocapitalize="off" spellcheck="false"></label>
-      <p class="small">Pro jednorázový záznam zásobníku a lokálních proměnných zadej soubor a řádek dosažitelný při spuštění. Výsledný debug.json otevři v Konzoli, kde uvidíš zásobník a proměnné.</p>
+      <p class="small">Pro jednorázový záznam zásobníku a lokálních proměnných zadej soubor a řádek dosažitelný při spuštění. Výsledný debug.json otevři v diagnostice sestavení.</p>
+      </div></details>
       <button id="simulate" type="button" class="primary">Spustit a pořídit snímek</button>
       <div id="preview-results" aria-live="polite"></div>
       <details class="group"><summary>Otevřít snímek ze Souborů</summary><div class="group-body">
@@ -140,11 +180,13 @@ THE SOFTWARE.
       </div></details>
     </section>
     <section class="panel console" data-panel="console" data-view-panel="console" hidden>
-      <div class="panel-heading"><h1>Konzole</h1><button type="button" id="btn-refresh">Obnovit běhy</button></div>
+      <div class="panel-heading"><h1>Sestavení</h1><button type="button" id="btn-refresh">Obnovit běhy</button></div>
       <div id="status" class="status" role="status" aria-live="polite">Připraveno.</div>
-      <section id="issues" aria-label="Diagnostika a testy"></section>
-      <section id="debug-report" aria-label="Ladění LLDB"></section>
       <h2>Historie sestavení</h2><div id="builds" class="build-list"></div>
+      <details class="group" id="build-diagnostics"><summary>Diagnostika, testy a ladění</summary><div class="group-body">
+        <section id="issues" aria-label="Diagnostika a testy"></section>
+        <section id="debug-report" aria-label="Ladění LLDB"></section>
+      </div></details>
       <details class="group"><summary>Instalace přes SideStore</summary><div class="group-body">
         <ol><li>U úspěšného sestavení klepni na <strong>Stáhnout ZIP s IPA</strong>. V Safari se případně přihlas ke GitHubu.</li>
         <li>V Souborech rozbal stažený ZIP. Uvnitř najdeš <strong>PocketApp-unsigned.ipa</strong>.</li>

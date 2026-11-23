@@ -100,6 +100,10 @@ export function mountDeviceFiles(container, api = globalThis.pocketIDE) {
   const input = document.createElement("input"); input.type="file"; input.multiple=true; input.hidden=true;
   // Validate after selection so Files can offer Swift and other plain-text extensions from every provider.
   const status = document.createElement("p"); status.setAttribute("role","status");
+  function feedback(message, error = false) {
+    status.textContent = message;
+    document.dispatchEvent(new CustomEvent("pocket:device-status", {detail:{message,error}}));
+  }
   controls.append(label,hint,pick,input,status); container.append(details);
   pick.addEventListener("click",()=>input.click());
   document.addEventListener("pocket:import-files",()=>{ if (!pick.disabled) { details.open=true; input.click(); } });
@@ -109,14 +113,14 @@ export function mountDeviceFiles(container, api = globalThis.pocketIDE) {
     if (!selection.length || pick.disabled) return;
     if (selection.some(file => /\.zip$/i.test(file.name))) {
       if (selection.length !== 1) {
-        status.textContent = "Pro otevření projektu vyber jeden ZIP.";
+        feedback("Pro otevření projektu vyber jeden ZIP.", true);
         return;
       }
       document.dispatchEvent(new CustomEvent("pocket:zip-selected", {detail:{file:selection[0]}}));
       return;
     }
     pick.disabled=folder.disabled=true;
-    status.textContent="Čtu vybrané soubory…";
+    feedback("Čtu vybrané soubory…");
     try {
       const target=api.getProject();
       const items=await readDeviceFiles(selection,folder.value,target);
@@ -125,10 +129,10 @@ export function mountDeviceFiles(container, api = globalThis.pocketIDE) {
       const next=mergeDeviceFiles(target,items);
       const active=items.find(item=>!item.asset)?.path || api.getActive();
       api.commitProject(next,active);
-      status.textContent = "Počet přidaných souborů: " + items.length + ".";
+      feedback("Počet přidaných souborů: " + items.length + ".");
       document.dispatchEvent(new CustomEvent("pocket:device-imported", {detail:{paths:items.map(item => item.path)}}));
     } catch (error) {
-      status.textContent = "Import se neprovedl. " + (error.message || String(error));
+      feedback("Import se neprovedl. " + (error.message || String(error)), true);
     } finally { pick.disabled=folder.disabled=false; }
   });
 }

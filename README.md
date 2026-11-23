@@ -162,7 +162,7 @@ Autor a licence
 
 Created by David Volf — HappyMistake64.
 
-© 2026 David Volf. Všechna práva vyhrazena. [Oznámení o autorských právech](LICENSE)
+© 2026 David Volf. Původní kód a dokumentace SWiDE jsou dostupné pod [licencí MIT](LICENSE). Součásti třetích stran se řídí vlastními licencemi.
 
 Xcode je ochranná známka společnosti Apple Inc. SwiDe je nezávislý projekt Davida Volfa.
 

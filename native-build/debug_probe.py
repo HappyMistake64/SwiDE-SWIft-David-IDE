@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 
 
 SPEC = re.compile(r"([A-Za-z0-9_][A-Za-z0-9_.-]{0,119}\.swift):([1-9][0-9]{0,5})")
@@ -44,7 +45,7 @@ def probe():
     if not target.IsValid():
         raise RuntimeError("LLDB did not create the app target.")
     # Bind before attaching: app code may live in a Swift debug dylib loaded at launch.
-    bp = target.BreakpointCreateByLocation(name, line)
+    bp = target.BreakpointCreateByLocation(os.environ["POCKET_DEBUG_SOURCE"], line)
     if not bp.IsValid():
         raise RuntimeError("LLDB could not create the source breakpoint.")
     process = target.AttachToProcessWithID(debugger.GetListener(), int(os.environ["POCKET_DEBUG_PID"]), (error := lldb.SBError()))
@@ -52,15 +53,40 @@ def probe():
         raise RuntimeError("LLDB attach failed: " + str(error))
     try:
         doc["locations_at_attach"] = bp.GetNumLocations()
+        doc["resolved_at_attach"] = bp.GetNumResolvedLocations()
         finish(doc, "armed", "Attached; waiting for the selected source breakpoint.")
+        debugger.SetAsync(True)
+        listener = lldb.SBListener("pocket-selected-breakpoint")
+        process.GetBroadcaster().AddListener(listener, lldb.SBProcess.eBroadcastBitStateChanged)
         error = process.Continue()
         if not error.Success():
             raise RuntimeError("LLDB continue failed: " + str(error))
-        thread = next((t for t in process if t.GetStopReason() == lldb.eStopReasonBreakpoint and
-                       any(t.GetStopReasonDataAtIndex(i) == bp.GetID() for i in range(0,t.GetStopReasonDataCount(),2))), None)
+        deadline = time.monotonic() + 180
+        thread = None
+        last_state = ""
+        while time.monotonic() < deadline:
+            event = lldb.SBEvent()
+            if not listener.WaitForEvent(1, event) or not lldb.SBProcess.EventIsProcessEvent(event):
+                continue
+            state = lldb.SBProcess.GetStateFromEvent(event)
+            last_state = lldb.SBDebugger.StateAsCString(state)
+            if state == lldb.eStateStopped:
+                if lldb.SBProcess.GetRestartedFromEvent(event):
+                    continue
+                thread = next((t for t in process if t.GetStopReason() == lldb.eStopReasonBreakpoint and
+                               any(t.GetStopReasonDataAtIndex(i) == bp.GetID() for i in range(0,t.GetStopReasonDataCount(),2))), None)
+                if thread is not None:
+                    break
+                doc["stop_reasons"] = [str(t.GetStopDescription(180) or "") for t in list(process)[:3]]
+                break
+            if state in (lldb.eStateExited, lldb.eStateDetached, lldb.eStateCrashed):
+                break
+        doc["last_state"] = last_state
+        doc["resolved_after_resume"] = bp.GetNumResolvedLocations()
         if thread is None:
-            finish(doc,"not_hit","Execution stopped or exited before reaching the selected breakpoint.")
+            finish(doc,"not_hit","Breakpoint not reached before exit, another stop, or the 180-second execution limit.")
             return
+        finish(doc,"inspecting","Breakpoint reached; reading its stack and local variables.")
         doc["thread_id"] = thread.GetThreadID()
         frames = []
         for i in range(min(thread.GetNumFrames(), 15)):
@@ -107,21 +133,23 @@ def run(args):
     dest = args.output.resolve()
     os.environ["POCKET_DEBUG_OUTPUT"] = str(dest)
     finish(doc,"starting","Starting debugger.")
-    env = {**os.environ,"DEBUG_AT":args.spec,"POCKET_DEBUG_EXE":str(args.executable.resolve()),"POCKET_DEBUG_PID":str(args.pid)}
+    source = next(p for p in args.sources.rglob("*.swift") if p.name == name)
+    env = {**os.environ, "POCKET_DEBUG_SOURCE":str(source.resolve()),"DEBUG_AT":args.spec,"POCKET_DEBUG_EXE":str(args.executable.resolve()),"POCKET_DEBUG_PID":str(args.pid)}
     cmd = ["xcrun","lldb","--no-lldbinit","--batch",
            "-o","settings set target.load-script-from-symbol-file false",
            "-o","script import runpy; runpy.run_path('native-build/debug_probe.py', run_name='pocket_lldb')"]
     try:
-        process = subprocess.run(cmd,env=env,capture_output=True,text=True,timeout=60)
+        process = subprocess.run(cmd,env=env,capture_output=True,text=True,timeout=270)
         result = json.loads(dest.read_text())
-        if result["status"] in {"starting","armed"}:
+        if result["status"] in {"starting","armed","inspecting"}:
             finish(result,"error","Debugger finished without a result: "+(process.stderr or process.stdout)[-1200:])
     except subprocess.TimeoutExpired:
         result = json.loads(dest.read_text())
-        if result["status"] in {"armed","starting"}:
-            armed = result["status"] == "armed"
-            finish(result, "not_hit" if armed else "error",
-                   "Breakpoint was not reached within the time limit." if armed else "Debugger attach timed out.")
+        if result["status"] in {"armed","starting","inspecting"}:
+            phase = result["status"]
+            finish(result, "error",
+                   {"armed":"Debugger did not deliver a stop or timeout report.", "starting":"Debugger attach timed out.",
+                    "inspecting":"Breakpoint reached, but debugger frame/locals inspection timed out."}[phase])
     except OSError as err:
         finish(doc,"error",str(err)[:600])
     result = json.loads(dest.read_text())

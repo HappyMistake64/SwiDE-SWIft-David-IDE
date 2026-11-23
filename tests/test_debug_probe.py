@@ -45,7 +45,7 @@ class ProbeTests(unittest.TestCase):
                     raise subprocess.TimeoutExpired(cmd,60)
                 with patch.object(subprocess,"run",side_effect=timeout):
                     probe.run(args)
-                self.assertEqual(json.loads(args.output.read_text())["status"],"not_hit" if armed else "error")
+                self.assertEqual(json.loads(args.output.read_text())["status"],"error")
                 self.assertTrue((p/"debug.txt").is_file())
 
 

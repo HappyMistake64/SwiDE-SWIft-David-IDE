@@ -39,6 +39,7 @@ xcrun simctl bootstatus "$device" -b
 xcodebuild -project build-project/PocketApp.xcodeproj -scheme PocketApp \
   -configuration Debug -sdk iphonesimulator -destination "id=$device" \
   -derivedDataPath build-preview -disableAutomaticPackageResolution -skipPackageUpdates \
+  DEBUG_INFORMATION_FORMAT=dwarf GCC_GENERATE_DEBUGGING_SYMBOLS=YES ENABLE_DEBUG_DYLIB=NO \
   CODE_SIGNING_ALLOWED=NO build
 app=build-preview/Build/Products/Debug-iphonesimulator/PocketApp.app
 actual_bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")

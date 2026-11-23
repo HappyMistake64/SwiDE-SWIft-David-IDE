@@ -16,6 +16,7 @@ jobs:
     timeout-minutes: 30
     env:
       REQUEST_ID: bca30ccb-961e-49ea-a343-5de9770125b4
+      APPEARANCE: both
       DEBUG_AT: PocketApp.swift:7
       BUNDLE_ID: cz.davidvolf.pocketpreviewcheck
     steps:
@@ -34,7 +35,9 @@ jobs:
           assert r["frames"][0]["file"] == "PocketApp.swift", r["frames"]
           assert r["frames"][0]["line"] == 7, r["frames"]
           assert any(v["name"] == "pocketMarker" and v["value"] == "4817" for v in r["locals"]), r["locals"]
-          assert pathlib.Path("artifacts/preview/screenshot.png").stat().st_size > 32
+          light=pathlib.Path("artifacts/preview/screenshot.png").read_bytes()
+          dark=pathlib.Path("artifacts/preview/screenshot-dark.png").read_bytes()
+          assert dark.startswith(b"\x89PNG") and len(light)>32 and light != dark
           PYTHON
       - uses: actions/upload-artifact@v4
         if: always()

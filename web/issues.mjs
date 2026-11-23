@@ -20,7 +20,8 @@
   const summary = make("p");
   summary.setAttribute("role", "status");
   const list = make("ul");
-  panel.append(label, link, help, importLabel, summary, list);
+  const coverageView = make("details"); coverageView.hidden = true;
+  panel.append(label, link, help, importLabel, summary, list, coverageView);
   // Match the same logs artifact exposed by the verified build card.
   function logs(build) {
     return build.artifacts?.find(a => a.name === "pocket-ios-logs-" + build.request_id &&
@@ -48,6 +49,20 @@
         !/^[0-9a-f]{64}$/.test(report.file_hashes[item.path]) || !["warning","error","note"].includes(item.severity) ||
         !Number.isSafeInteger(item.line) || item.line < 1 || !Number.isSafeInteger(item.column) || item.column < 1 ||
         typeof item.message !== "string" || item.message.length > 1600) throw Error("Poškozený záznam diagnostiky.");
+    }
+    if (report.coverage != null) {
+      const c=report.coverage, paths=new Set();
+      if (!Array.isArray(c.files) || !c.files.length || c.files.length>200) throw Error("Neplatný formát pokrytí.");
+      let covered=0, executable=0;
+      for (const row of c.files) {
+        if (typeof row?.path!=="string" || !row.path.endsWith(".swift") || row.path.length>1024 || paths.has(row.path) ||
+            !Number.isSafeInteger(row.coveredLines) || !Number.isSafeInteger(row.executableLines) ||
+            row.coveredLines<0 || row.executableLines<row.coveredLines) throw Error("Poškozené pokrytí souboru.");
+        paths.add(row.path);
+        covered+=row.coveredLines; executable+=row.executableLines;
+      }
+      if (!Number.isSafeInteger(executable) || covered!==c.coveredLines || executable!==c.executableLines)
+        throw Error("Celkové pokrytí nesouhlasí se soubory.");
     }
     return report;
   }
@@ -79,7 +94,13 @@
     editor.scrollTop = Math.max(0, (item.line-1)*(parseFloat(getComputedStyle(editor).lineHeight)||20)-editor.clientHeight/3);
     editor.dispatchEvent(new Event("select",{bubbles:true}));
   }
+  const percent = new Intl.NumberFormat("cs-CZ", {style:"percent",maximumFractionDigits:1});
+  function coverageLabel(row) {
+    const lines=row.coveredLines+" / "+row.executableLines;
+    return row.executableLines ? lines+" ("+percent.format(row.coveredLines/row.executableLines)+")" : lines+" (bez spustitelných řádků)";
+  }
   function display() {
+    coverageView.replaceChildren(); coverageView.hidden=true; coverageView.open=false;
     list.replaceChildren();
     const build = selected();
     picker.disabled = !build; input.disabled = !build; link.hidden = !build; help.hidden = !build;
@@ -94,6 +115,13 @@
     summary.textContent="Běh #"+build.run_id+" · pokus "+report.identity.workflow_attempt+" · commit "+build.source_sha.slice(0,8)+
       ". XCTest: "+(statuses[report.tests.status] || "stav nezjištěn")+(counts.length?" ("+counts.join(", ")+")":"")+
       ". Zdrojové diagnostiky: "+report.diagnostics.length+(report.truncated?" (zkráceno)":"")+".";
+    if (report.coverage) {
+      const c=report.coverage, files=make("ul");
+      for (const row of c.files) files.append(make("li",row.path+" · "+coverageLabel(row)));
+      coverageView.append(make("summary","Pokrytí Swift kódu aplikace · "+coverageLabel(c)),
+        make("p","Pokryté řádky / spustitelné řádky podle XCTest."),files);
+      coverageView.hidden=false;
+    }
     for (const item of report.diagnostics) {
       const li=make("li"), location=make("button",item.path+":"+item.line+":"+item.column);
       location.type="button"; location.addEventListener("click",()=>jump(report,item).catch(e=>{summary.textContent=e.message;}));

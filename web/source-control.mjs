@@ -1,3 +1,5 @@
+import {GithubAPI, validateSettings} from "./core.mjs";
+
 // Compare the editable text workspace. Binary resources and project metadata are kept on restore.
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const checkpointKey = "pocket-ide-checkpoint-v1";
@@ -121,6 +123,122 @@ function lastSubmission(db, record) {
   });
 }
 
+const shaPattern = /^[a-f0-9]{40}$/i;
+const branchPageSize = 100, commitPageSize = 20;
+
+export async function readBranches(api, page = 1) {
+  if (!Number.isSafeInteger(page) || page < 1) throw Error("Chybné číslo stránky.");
+  const result = await api.request("GET", "/branches?per_page=" + branchPageSize + "&page=" + page);
+  if (!Array.isArray(result)) throw Error("GitHub nevrátil seznam větví.");
+  return result.map(branch => {
+    if (!branch?.name || typeof branch.name !== "string" || !shaPattern.test(branch.commit?.sha))
+      throw Error("Neplatná větev v odpovědi GitHubu.");
+    return {name:branch.name, sha:branch.commit.sha};
+  });
+}
+
+export async function readCommits(api, head, page = 1) {
+  if (!shaPattern.test(head) || !Number.isSafeInteger(page) || page < 1) throw Error("Neplatná verze větve.");
+  const repo = validateSettings({repo:api.repo}).repo;
+  // Pin all pages to the selected branch head in case someone pushes while scrolling.
+  const result = await api.request("GET", "/commits?sha=" + head + "&per_page=" + commitPageSize + "&page=" + page);
+  if (!Array.isArray(result)) throw Error("GitHub nevrátil seznam commitů.");
+  return result.map(item => {
+    if (!shaPattern.test(item?.sha) || typeof item.commit?.message !== "string")
+      throw Error("Neplatný commit v odpovědi GitHubu.");
+    return {sha:item.sha, title:item.commit.message.split(/\r?\n/, 1)[0],
+      author:item.commit.author?.name || "", date:item.commit.author?.date || "",
+      url:"https://github.com/" + repo + "/commit/" + item.sha};
+  });
+}
+
+function repositoryReader(ide) {
+  const repo = validateSettings({repo:document.getElementById("repo").value.trim()}).repo;
+  let connected;
+  try { connected = ide.getAPI(); } catch {}
+  if (connected?.repo === repo) return connected;
+  // A read-only token can browse private history without passing the build permission check.
+  const token = document.getElementById("connect-token")?.value.trim();
+  if (token) return new GithubAPI(token, repo);
+  return {repo, async request(method, path) {
+    const response = await fetch("https://api.github.com/repos/" + repo + path, {
+      method, cache:"no-store", credentials:"omit", headers:{Accept:"application/vnd.github+json"}
+    });
+    if (!response.ok) throw Error("GitHub HTTP " + response.status + ". Zkontroluj repozitář a oprávnění ke čtení.");
+    return response.json();
+  }};
+}
+
+function mountHistory(container, ide) {
+  const header = element("h3", "Historie na GitHubu");
+  const tools = element("div", undefined, "inline-actions");
+  const load = element("button", "Načíst větve");
+  const branch = element("select"); branch.setAttribute("aria-label", "Větev na GitHubu");
+  const moreBranches = element("button", "Další větve"), moreCommits = element("button", "Starší commity");
+  for (const button of [load, moreBranches, moreCommits]) button.type = "button";
+  branch.hidden = moreBranches.hidden = moreCommits.hidden = true;
+  const note = element("p", undefined, "small muted"); note.setAttribute("role", "status");
+  const list = element("ol");
+  tools.append(load, branch, moreBranches);
+  container.append(header, tools, note, list, moreCommits);
+  let generation = 0, selection = 0, api, branches = [], branchPage = 0, commitPage = 0;
+  let commitNotice = "";
+  function reset() {
+    generation++; selection++; api = undefined; branches = []; branchPage = commitPage = 0;
+    list.replaceChildren(); branch.replaceChildren();
+    branch.hidden = moreBranches.hidden = moreCommits.hidden = true;
+    moreBranches.disabled = moreCommits.disabled = false; commitNotice = ""; note.textContent = "";
+  }
+  async function commits(append = false) {
+    const id = ++selection, request = api, selected = branches.find(item => item.name === branch.value);
+    if (!selected || !request) return;
+    if (!append) { list.replaceChildren(); commitPage = 0; moreCommits.hidden = true; }
+    moreCommits.disabled = true; note.textContent = "Načítám historii větve " + selected.name + "…";
+    try {
+      const rows = await readCommits(request, selected.sha, commitPage + 1);
+      if (id !== selection) return;
+      for (const row of rows) {
+        const entry = element("li"), link = element("a", row.title || row.sha.slice(0, 8));
+        link.href = row.url; link.target = "_blank"; link.rel = "noopener noreferrer";
+        const date = new Date(row.date);
+        const details = [row.sha.slice(0, 8), row.author, Number.isFinite(date.getTime()) ? date.toLocaleString("cs-CZ") : ""];
+        entry.append(link, element("div", details.filter(Boolean).join(" · "), "small muted"));
+        list.append(entry);
+      }
+      commitPage++; moreCommits.hidden = rows.length < commitPageSize;
+      commitNotice = request.repo + " · " + selected.name + " · Počet zobrazených commitů: " + list.children.length;
+      note.textContent = commitNotice;
+    } catch (error) { if (id === selection) { note.textContent = error.message; moreCommits.hidden = false; } }
+    finally { if (id === selection) moreCommits.disabled = false; }
+  }
+  async function loadBranches(append = false) {
+    if (!append) reset();
+    const id = generation;
+    moreBranches.disabled = true; note.textContent = "Načítám větve…";
+    try {
+      if (!api) api = repositoryReader(ide);
+      const rows = await readBranches(api, branchPage + 1);
+      if (id !== generation) return;
+      for (const row of rows) {
+        if (branches.some(existing => existing.name === row.name)) continue;
+        branches.push(row); branch.append(new Option(row.name, row.name));
+      }
+      branchPage++; moreBranches.hidden = rows.length < branchPageSize; branch.hidden = !branches.length;
+      if (!append && branches.length) {
+        branch.value = branches.find(row => row.name === "main")?.name || branches[0].name;
+        await commits();
+      } else note.textContent = commitNotice || "Repozitář zatím nemá žádné větve.";
+    } catch (error) { if (id === generation) note.textContent = error.message; }
+    finally { if (id === generation) moreBranches.disabled = false; }
+  }
+  load.onclick = () => void loadBranches();
+  moreBranches.onclick = () => void loadBranches(true);
+  moreCommits.onclick = () => void commits(true);
+  branch.onchange = () => void commits();
+  document.getElementById("repo")?.addEventListener("input", reset);
+  document.getElementById("connect-token")?.addEventListener("input", reset);
+}
+
 export function mountSourceControl(container, api) {
   const title = element("h2", "Změny souborů");
   const tools = element("div", undefined, "inline-actions");
@@ -136,6 +254,7 @@ export function mountSourceControl(container, api) {
   const message = element("p"); message.setAttribute("role", "status");
   const list = element("div");
   container.replaceChildren(title, tools, status, message, list);
+  mountHistory(container, api);
   let submitted = null, open = new Set(), timer, edits = 0;
   const db = database().catch(() => null);
 

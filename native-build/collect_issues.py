@@ -68,6 +68,46 @@ def test_summary(bundle, outcome, detail):
     return result
 
 
+def coverage_summary(bundle, project, generated):
+    """Read instrumented application Swift files from this project's actual XCTest bundle."""
+    if not bundle.exists():
+        return None
+    command = ["xcrun", "xccov", "view", "--report", "--json", str(bundle)]
+    try:
+        response = subprocess.run(command, capture_output=True, text=True, check=True, timeout=45)
+        data = json.loads(response.stdout)
+    except (ValueError, subprocess.SubprocessError, OSError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("targets"), list):
+        return None
+    eligible = {(generated / "Sources" / name).resolve(): name for name, value in project.get("files", {}).items()
+                if isinstance(value, str) and name.endswith(".swift") and not name.startswith(("Tests/", "Resources/"))}
+    files = {}
+    for target in data["targets"]:
+        if not isinstance(target, dict) or target.get("name") not in ("PocketApp", "PocketApp.app"):
+            continue
+        for item in target.get("files") or []:
+            if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+                continue
+            path = Path(item["path"])
+            if not path.is_absolute():
+                continue
+            name = eligible.get(path.resolve())
+            covered, executable = item.get("coveredLines"), item.get("executableLines")
+            if name is None or type(covered) is not int or type(executable) is not int or not 0 <= covered <= executable:
+                continue
+            row = {"path": name, "coveredLines": covered, "executableLines": executable}
+            if name in files and files[name] != row:
+                # Multiple incompatible records cannot be combined without line-level data.
+                return None
+            files[name] = row
+    if not files:
+        return None
+    rows = [files[name] for name in sorted(files)]
+    return {"coveredLines": sum(row["coveredLines"] for row in rows),
+            "executableLines": sum(row["executableLines"] for row in rows), "files": rows}
+
+
 def main():
     arg = argparse.ArgumentParser()
     arg.add_argument("--artifacts", type=Path, default=Path("artifacts"))
@@ -82,7 +122,8 @@ def main():
     issues, hashes, truncated = collect([dest/"xcodebuild.log", dest/"xctest.log"], project, args.generated)
     report = {"schema":"xcode-pocket-issues/v1", "repository":args.repository, "identity":identity,
               "diagnostics":issues, "file_hashes":hashes, "truncated":truncated,
-              "tests":test_summary(dest/"PocketTests.xcresult", args.outcome, args.detail)}
+              "tests":test_summary(dest/"PocketTests.xcresult", args.outcome, args.detail),
+              "coverage":coverage_summary(dest/"PocketTests.xcresult", project, args.generated)}
     (dest/"pocket-issues.json").write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
 
 

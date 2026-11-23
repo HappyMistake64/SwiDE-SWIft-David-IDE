@@ -178,6 +178,7 @@ async function submit(capturePreview = false) {
     const req=makeRequest(state.settings,state.project);
     if (capturePreview) {
       req.capturePreview=true;
+      req.appearance=byId("preview-appearance").value;
       const where=byId("debug-at").value.trim();
       if (where) {
         const match=/^([A-Za-z0-9_][A-Za-z0-9_.-]{0,119}\.swift):([1-9][0-9]{0,5})$/.exec(where);

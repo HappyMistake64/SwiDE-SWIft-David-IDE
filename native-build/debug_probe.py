@@ -1,6 +1,7 @@
 """One bounded source breakpoint for the generated simulator app. No expression evaluation."""
 import argparse
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -94,7 +95,15 @@ def run(args):
         raise ValueError("Simulator app PID or executable is missing.")
     doc = {"schema":"xcode-pocket-debug/v1", "breakpoint":{"file":name,"line":line}, "frames":[], "locals":[]}
     identity = Path("artifacts/build-identity.json")
-    if identity.is_file(): doc["identity"] = json.loads(identity.read_text())
+    if identity.is_file():
+        doc["identity"] = json.loads(identity.read_text())
+        doc["repository"] = os.environ.get("GITHUB_REPOSITORY", "")
+        project = json.loads(Path(doc["identity"]["project_path"]).read_text())
+        # LLDB returns basenames. Ambiguous source names are never offered as jump targets.
+        sources = {p:text for p,text in project["files"].items()
+                   if p.endswith(".swift") and not p.startswith(("Tests/", "Resources/")) and isinstance(text,str)}
+        doc["source_hashes"] = {p:hashlib.sha256(text.encode()).hexdigest() for p,text in sources.items()}
+
     dest = args.output.resolve()
     os.environ["POCKET_DEBUG_OUTPUT"] = str(dest)
     finish(doc,"starting","Starting debugger.")

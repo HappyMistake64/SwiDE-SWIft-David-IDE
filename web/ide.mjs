@@ -234,6 +234,7 @@
     "language":["Swift · přejít na definici a doplnit kód",()=>revealTool("language-tools")],
     "editor-tools":["Šablony, skládání kódu a přesun souboru",()=>revealTool("editor-tools")],
     "diff":["Zobrazit změny zdrojových souborů",()=>revealTool("source-control")],
+    "debug-report":["Zobrazit zásobník a proměnné LLDB",()=>revealTool("debug-report")],
     "issues":["Diagnostika kompilátoru a výsledky testů",()=>revealTool("issues")],
     "original":["Otevřít nebo sestavit původní ZIP projekt",()=>revealTool("zip-workspace")],
     "project-search":["Hledat v projektu", () => focusControl("project-search")],

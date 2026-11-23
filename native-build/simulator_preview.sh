@@ -3,6 +3,11 @@
 set -euo pipefail
 : "${REQUEST_ID:?}" "${BUNDLE_ID:?}"
 mkdir -p artifacts/preview
+appearance="${APPEARANCE:-default}"
+case "$appearance" in
+  default|light|dark|both) ;;
+  *) echo 'Unknown simulator appearance.' >&2; exit 1 ;;
+esac
 if [[ -n "${DEBUG_AT:-}" ]]; then
   python3 native-build/debug_probe.py "$DEBUG_AT" --sources build-project/Sources
 fi
@@ -39,6 +44,10 @@ app=build-preview/Build/Products/Debug-iphonesimulator/PocketApp.app
 actual_bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
 [[ "$actual_bundle" == "$BUNDLE_ID" ]]
 xcrun simctl install "$device" "$app"
+case "$appearance" in
+  both|light) xcrun simctl ui "$device" appearance light ;;
+  dark) xcrun simctl ui "$device" appearance dark ;;
+esac
 launch=$(xcrun simctl launch "$device" "$BUNDLE_ID")
 echo "$launch"
 pid=${launch##*: }
@@ -48,6 +57,13 @@ sleep 3
 kill -0 "$pid"
 xcrun simctl io "$device" screenshot artifacts/preview/screenshot.png
 kill -0 "$pid"
+if [[ "$appearance" == "both" ]]; then
+  xcrun simctl ui "$device" appearance dark
+  sleep 2
+  kill -0 "$pid"
+  xcrun simctl io "$device" screenshot artifacts/preview/screenshot-dark.png
+  kill -0 "$pid"
+fi
 python3 - <<'PY'
 from pathlib import Path
 import struct

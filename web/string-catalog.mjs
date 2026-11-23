@@ -46,18 +46,37 @@ function inspectCatalog(source) {
   return {entries, language:field(root,"sourceLanguage").string};
 }
 
-function simpleEntry(entry) {
+const pluralForms = new Set(["zero","one","two","few","many","other"]);
+
+function simpleUnit(localized) {
+  if (!localized?.fields || localized.fields.size !== 1) return false;
+  const unit = field(localized,"stringUnit");
+  return unit?.fields && field(unit,"value")?.string !== undefined &&
+    (!field(unit,"state") || field(unit,"state").string !== undefined);
+}
+
+function pluralUnits(localized) {
+  if (localized?.fields?.size !== 1) return undefined;
+  const variations = field(localized,"variations");
+  if (variations?.fields?.size !== 1) return undefined;
+  const units = field(variations,"plural")?.fields;
+  return units?.size && [...units].every(([form,item]) => pluralForms.has(form) && simpleUnit(item))
+    ? units : undefined;
+}
+
+function entryKind(entry) {
   if (!entry?.fields || field(entry,"variations") || field(entry,"substitutions") ||
-      (field(entry,"shouldTranslate") && field(entry,"shouldTranslate").literal !== "true")) return false;
+      (field(entry,"shouldTranslate") && field(entry,"shouldTranslate").literal !== "true")) return undefined;
   const loc = field(entry,"localizations");
-  if (!loc) return true;
-  if (!loc.fields) return false;
-  return [...loc.fields.values()].every(value => {
-    if (!value.fields || value.fields.size !== 1) return false;
-    const unit = field(value,"stringUnit");
-    return unit?.fields && field(unit,"value")?.string !== undefined &&
-      (!field(unit,"state") || field(unit,"state").string !== undefined);
-  });
+  if (!loc) return "simple";
+  if (!loc.fields) return undefined;
+  let kind = "simple";
+  for (const localized of loc.fields.values()) {
+    if (simpleUnit(localized)) continue;
+    if (!pluralUnits(localized)) return undefined;
+    kind = "plural";
+  }
+  return kind;
 }
 
 function addMember(source, object, name, value) {
@@ -66,9 +85,10 @@ function addMember(source, object, name, value) {
   return source.slice(0,insertion) + member + source.slice(insertion);
 }
 
-export function writeTranslation(source, key, language, value) {
+export function writeTranslation(source, key, language, value, form = "") {
   const {entries} = inspectCatalog(source), entry = entries.get(key);
-  if (!simpleEntry(entry)) throw Error("Tento klíč je vyloučen z překladu nebo má složitou strukturu.");
+  const kind = entryKind(entry);
+  if (!kind) throw Error("Tento klíč je vyloučen z překladu nebo má složitou strukturu.");
   if (typeof value !== "string" || typeof language !== "string" || !language.trim()) throw Error("Zadej jazyk překladu.");
   const original = field(entry,"localizations");
   const unit = {state:"translated", value};
@@ -80,10 +100,13 @@ export function writeTranslation(source, key, language, value) {
     try { existing = Intl.getCanonicalLocales(name)[0]; } catch { existing = name; }
     if (existing === locale) { locale = name; break; }
   }
+  if ((form || kind === "plural") && !field(original,locale)) throw Error("Pro množná čísla vyber existující jazyk a tvar.");
   if (!original) return addMember(source,entry,"localizations",{[locale]:{stringUnit:unit}});
   const localized = field(original,locale);
   if (!localized) return addMember(source,original,locale,{stringUnit:unit});
-  const current = field(localized,"stringUnit");
+  const units = pluralUnits(localized);
+  if ((units && !units.has(form)) || (!units && form)) throw Error("Vyber existující tvar množného čísla.");
+  const current = field(units ? units.get(form) : localized,"stringUnit");
   const val = field(current,"value"), state = field(current,"state");
   const changes = [];
   if (val.string !== value) changes.push([val.start,val.end,JSON.stringify(value)]);
@@ -116,30 +139,42 @@ export function renderStringCatalog(container, source, commit) {
   const save = node("button","Uložit překlad"); save.type = "button";
   const message = node("p"); message.setAttribute("role","status");
   const inputs = node("div"); inputs.className = "group-body";
-  inputs.append(label("Překlad",langs),label("Jazyk",language),label("Hodnota",text),save);
+  const forms = node("select");
+  const formLabel = label("Tvar množného čísla",forms);
+  inputs.append(label("Překlad",langs),label("Jazyk",language),formLabel,label("Hodnota",text),save);
   container.append(node("p","Výchozí jazyk: " + catalog.language),label("Klíč",select),inputs,message);
-  const refreshLocale = () => {
+  function refreshValue() {
+    const loc = field(field(catalog.entries.get(select.value),"localizations"),langs.value);
+    const unit = field(formLabel.hidden ? loc : pluralUnits(loc)?.get(forms.value),"stringUnit");
+    text.value = field(unit,"value")?.string || "";
+  }
+  function refreshLocale() {
     const entry = catalog.entries.get(select.value);
-    const locale = langs.selectedIndex > 0 ? langs.value : "";
-    language.value = locale;
-    language.readOnly = !!locale;
-    text.value = field(field(field(field(entry,"localizations"),locale),"stringUnit"),"value")?.string || "";
-  };
+    language.value = langs.value;
+    language.readOnly = !!langs.value;
+    const units = pluralUnits(field(field(entry,"localizations"),langs.value));
+    formLabel.hidden = !units;
+    forms.replaceChildren(...[...(units?.keys() || [])].map(form => new Option(form,form)));
+    refreshValue();
+  }
   function refreshKey() {
     const entry = catalog.entries.get(select.value);
-    const supported = simpleEntry(entry);
-    inputs.hidden = !supported;
-    if (!supported) { message.textContent = "Klíč je vyloučen z překladu nebo obsahuje složité varianty. Při exportu se zachová."; return; }
-    langs.replaceChildren(new Option("Přidat jazyk",""));
+    const kind = entryKind(entry);
+    inputs.hidden = !kind;
+    if (!kind) { message.textContent = "Klíč je vyloučen z překladu nebo obsahuje složité varianty. Při exportu se zachová."; return; }
+    langs.replaceChildren();
+    if (kind === "simple") langs.append(new Option("Přidat jazyk",""));
     for (const key of field(entry,"localizations")?.fields.keys() || []) langs.append(new Option(key,key));
-    langs.selectedIndex = langs.options.length > 1 ? 1 : 0;
+    langs.selectedIndex = kind === "simple" && langs.options.length > 1 ? 1 : 0;
     message.textContent = ""; refreshLocale();
   }
+  forms.addEventListener("change",refreshValue);
   select.addEventListener("change",refreshKey); langs.addEventListener("change", refreshLocale);
   save.addEventListener("click", () => {
     try {
       const name = language.value.trim();
-      const next = writeTranslation(source,select.value,name,text.value);
+      const form = formLabel.hidden ? "" : forms.value;
+      const next = writeTranslation(source,select.value,name,text.value,form);
       commit(next); source = next; catalog = inspectCatalog(next);
       refreshKey();
       const canonical = Intl.getCanonicalLocales(name)[0];
@@ -147,7 +182,9 @@ export function renderStringCatalog(container, source, commit) {
         try { return o.value && Intl.getCanonicalLocales(o.value)[0] === canonical; } catch { return false; }
       });
       if (choice) langs.value = choice.value;
-      refreshLocale(); message.textContent = "Překlad je součástí upraveného projektu.";
+      refreshLocale();
+      if (form) { forms.value = form; refreshValue(); }
+      message.textContent = "Překlad je součástí upraveného projektu.";
     } catch (error) { message.textContent = error.message; }
   });
   refreshKey();

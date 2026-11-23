@@ -1,0 +1,31 @@
+name: Verify native editor in iPhone WebKit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'pocket-editor/**'
+      - 'tests/wkwebview/**'
+      - 'native-build/original-xcode/run_simulator.py'
+      - '.github/workflows/pocket-webkit-check.yml'
+permissions:
+  contents: read
+jobs:
+  iphone-webkit:
+    runs-on: macos-26
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile production editor with simulator-only test observer
+        run: bash tests/wkwebview/run.sh
+      - name: Save simulator evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-webkit-${{ github.run_id }}
+          path: artifacts/webkit/
+          if-no-files-found: warn
+          retention-days: 7

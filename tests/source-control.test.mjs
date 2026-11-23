@@ -38,3 +38,26 @@ test("restoring one file retains current metadata and unrelated edits", () => {
   assert.equal(restoreFile(current,base,"gone.md").files["gone.md"],"recovered");
   assert.equal(current.files["src.swift"],"edit");
 });
+
+import {readBranches, readCommits} from "../web/source-control.mjs";
+
+test("read-only branch and commit history uses stable head and canonical repository URL", async () => {
+  const head="a".repeat(40), child="b".repeat(40), calls=[];
+  const api={repo:"owner/editor", async request(method,path) {
+    calls.push([method,path]); return path.startsWith("/branches") ?
+      [{name:"feature/ui/refine",commit:{sha:head}}] :
+      [{sha:child,html_url:"https://elsewhere.invalid",commit:{message:"Subject\nBody",author:{name:"Eva",date:"2025-01-01"}}}];
+  }};
+  const branches=await readBranches(api,2), commits=await readCommits(api,branches[0].sha,3);
+  assert.equal(branches[0].name,"feature/ui/refine");
+  assert.equal(commits[0].title,"Subject");
+  assert.equal(commits[0].url,"https://github.com/owner/editor/commit/"+child);
+  assert.deepEqual(calls,[["GET","/branches?per_page=100&page=2"],["GET","/commits?sha="+head+"&per_page=20&page=3"]]);
+});
+
+test("history rejects invalid response and request parameters", async () => {
+  const api={repo:"owner/editor",request:async()=>[{name:"feature",commit:{sha:"broken"}}]};
+  await assert.rejects(readBranches(api)); await assert.rejects(readBranches(api,-1));
+  await assert.rejects(readCommits(api,"main&tampered=1"));
+  await assert.rejects(readCommits(api,"a".repeat(40)));
+});

@@ -46,3 +46,31 @@ test("catalog string survives a genuine ZIP workspace export + reopen with BOM a
   const edited=await openZipWorkspace(new Uint8Array(await exportZipWorkspace(original).arrayBuffer()));
   assert.equal(edited[0].text,original[0].edit);assert.ok(edited[0].bom);assert.ok(edited[0].crlf);
 });
+
+test("plural edits change only the selected locale and category, including transition to translated",()=>{
+  const cats = ["zero","one","two","few","many","other"];
+  const units = Object.fromEntries(cats.map(name=>[name,{stringUnit:{value:name,state:"needs_review"}}]));
+  const catalog = {version:"1.0",sourceLanguage:"en",strings:{Count:{comment:"Do not remove",
+    localizations:{cs:{variations:{plural:units}},en:{variations:{plural:units}}}}}};
+  const raw = JSON.stringify(catalog,null,2).replace(/\n/g,"\r\n");
+  for (const category of cats) {
+    const next = writeTranslation(raw,"Count","cs","%lld položek",category);
+    const expected = JSON.parse(raw);
+    expected.strings.Count.localizations.cs.variations.plural[category].stringUnit = {value:"%lld položek",state:"translated"};
+    assert.equal(next,JSON.stringify(expected,null,2).replace(/\n/g,"\r\n"));
+  }
+  assert.throws(()=>writeTranslation(raw,"Count","cs","ambiguous"));
+  assert.throws(()=>writeTranslation(raw,"Count","cs","unsupported","device"));
+  assert.throws(()=>writeTranslation(raw,"Count","fr","unknown","one"));
+  assert.throws(()=>writeTranslation(source,"Save","cs","unsupported","one"));
+});
+test("plural edit preserves numeric metadata and refuses mixed device and substitution structures",()=>{
+  const before = source.replace('"value":"one"','"x":90071992547409931,"value":"one"');
+  const next = writeTranslation(before,"Count","en","one apple","one");
+  assert.equal(next,before.replace('"value":"one"','"value":"one apple","state":"translated"'));
+  for(const variation of ['"device":{}','"substitutions":{}']) {
+    const mixed=source.replace('"plural":{"one":',variation+',"plural":{"one":');
+    assert.throws(()=>writeTranslation(mixed,"Count","en","unsafe","one"));
+  }
+  assert.throws(()=>writeTranslation(source,"Count","en","absent","other"));
+});

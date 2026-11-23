@@ -1,8 +1,8 @@
 // Online requests use current resources. Keep the complete shell available offline.
 const CACHE_PREFIX = "pocket-editor-";
-const CACHE = CACHE_PREFIX + "v0.3.0-1";
+const CACHE = CACHE_PREFIX + "v0.3.1-1";
 const ASSETS = [
-  "./", "./index.html", "./styles.css", "./app.mjs", "./core.mjs", "./ide.mjs", "./string-catalog.mjs", "./assets.mjs", "./issues.mjs", "./source-control.mjs", "./editor-tools.mjs", "./language.mjs", "./original-run.mjs",
+  "./", "./index.html", "./styles.css", "./app.mjs", "./core.mjs", "./ide.mjs", "./string-catalog.mjs", "./assets.mjs", "./issues.mjs", "./debug-report.mjs", "./source-control.mjs", "./editor-tools.mjs", "./language.mjs", "./original-run.mjs",
   "./syntax.mjs", "./zip-workspace.mjs", "./manifest.webmanifest", "./icon.svg"
 ];
 const assetURLs = new Set(ASSETS.map(path => new URL(path, self.registration.scope).href));

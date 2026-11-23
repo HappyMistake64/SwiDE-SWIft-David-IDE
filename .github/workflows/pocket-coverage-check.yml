@@ -1,0 +1,56 @@
+name: Generated XCTest coverage regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pocket-coverage-check.yml'
+      - '.github/workflows/pocket-ios.yml'
+      - 'native-build/generate_project.py'
+      - 'native-build/collect_issues.py'
+      - 'tests/coverage-check.py'
+      - 'tests/test_pocket_issues.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  coverage:
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate sample application and hosted XCTest target
+        run: |
+          mkdir "$RUNNER_TEMP/coverage-check"
+          cd "$RUNNER_TEMP/coverage-check"
+          python3 "$GITHUB_WORKSPACE/tests/coverage-check.py" prepare
+      - name: Execute instrumented XCTest on an iPhone simulator
+        run: |
+          set -o pipefail
+          cd "$RUNNER_TEMP/coverage-check"
+          simulator_id=$(python3 "$GITHUB_WORKSPACE/tests/coverage-check.py" simulator)
+          xcodebuild -project build-project/PocketApp.xcodeproj -scheme PocketApp \
+            -configuration Debug -destination "platform=iOS Simulator,id=$simulator_id" \
+            -destination-timeout 120 -parallel-testing-enabled NO -enableCodeCoverage YES \
+            -derivedDataPath build-tests -resultBundlePath artifacts/PocketTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee artifacts/xctest.log
+      - name: Collect production results and verify exercised Swift source
+        run: |
+          cd "$RUNNER_TEMP/coverage-check"
+          python3 "$GITHUB_WORKSPACE/native-build/collect_issues.py" \
+            --repository "$GITHUB_REPOSITORY" --outcome success --detail passed
+          python3 "$GITHUB_WORKSPACE/tests/coverage-check.py" verify
+      - name: Retain coverage report and test log for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-xctest-coverage
+          path: |
+            ${{ runner.temp }}/coverage-check/artifacts/pocket-issues.json
+            ${{ runner.temp }}/coverage-check/artifacts/xctest.log
+          if-no-files-found: ignore
+          retention-days: 7

@@ -34,6 +34,13 @@ on:
         required: false
         default: false
 
+      appearance:
+        description: Appearance of the generated simulator screenshot
+        type: choice
+        options: [default, light, dark, both]
+        default: default
+        required: false
+
       debug_at:
         description: Optional generated simulator breakpoint (e.g. ContentView.swift:7), requires capture_preview
         type: string
@@ -160,7 +167,7 @@ jobs:
           )
           xcodebuild -project build-project/PocketApp.xcodeproj -scheme PocketApp \
             -configuration Debug -destination "platform=iOS Simulator,id=$SIMULATOR_ID" -destination-timeout 120 \
-            -derivedDataPath build-tests -resultBundlePath artifacts/PocketTests.xcresult \
+            -enableCodeCoverage YES -derivedDataPath build-tests -resultBundlePath artifacts/PocketTests.xcresult \
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee artifacts/xctest.log
           echo 'result=passed' >> "$GITHUB_OUTPUT"
 
@@ -225,6 +232,7 @@ jobs:
         env:
           REQUEST_ID: ${{ inputs.request_id }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
+          APPEARANCE: ${{ inputs.appearance }}
           DEBUG_AT: ${{ inputs.debug_at }}
         run: |
           set -o pipefail
@@ -235,7 +243,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pocket-ios-preview-${{ inputs.request_id }}-${{ inputs.source_sha }}
-          path: artifacts/preview/screenshot.png
+          path: artifacts/preview/screenshot*.png
           if-no-files-found: error
           retention-days: 7
 

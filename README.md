@@ -4,11 +4,11 @@ Created by David Volf.
 
 Mobilní vývojové prostředí pro tvorbu Swift/SwiftUI aplikací z iPhonu s kompilací přes GitHub Actions na vzdáleném Macu.
 
-## Mobilní IDE 0.3.0
+## Mobilní IDE 0.3.1
 
 [Stáhnout aktuální editor](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/Xcode-Pocket-Editor.ipa) · [Rozsah funkcí a rozdíly oproti Xcode](docs/XCODE-PARITA.md)
 
-V panelu Projekt můžeš sestavit podporované původní ZIP projekty se sdíleným schématem, porovnat změny a spravovat obrázky. Editor nabízí vzdálené dotazy SourceKit, konzole načítá výsledky XCTest a diagnostiku. Pro ladění při startu podporuje simulátor jednorázový záznam LLDB. Vzdálené operace vyžadují připojení a schválení odeslání zdrojů.
+V panelu Projekt můžeš sestavit podporované původní ZIP projekty se sdíleným schématem, porovnat změny, procházet historii větví, spravovat obrázky a upravovat lokalizace včetně existujících plurálů. Editor nabízí vzdálené dotazy SourceKit, konzole načítá výsledky XCTest, pokrytí kódu po souborech a diagnostiku. Pro ladění při startu podporuje simulátor jednorázový záznam LLDB s otevřením příslušného řádku. Náhled umožňuje pořídit světlou i tmavou variantu obrazovky. Vzdálené operace vyžadují připojení a schválení odeslání zdrojů.
 
 ## Historie verze 0.2.0
 

@@ -55,6 +55,19 @@ class LanguageContract(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "darwin" and shutil.which("xcrun"), "requires Xcode and iPhoneOS SDK")
 class SourceKitOnMac(unittest.TestCase):
+    def test_complete_a_member_of_the_project_type(self):
+        source = "struct PocketValue { let pocketMarker: Int }\nfunc inspect(_ value: PocketValue) {\n    _ = value.\n}\n"
+        project = {"files": {"Value.swift": source}}
+        with tempfile.TemporaryDirectory() as tmp:
+            signal.alarm(150)
+            try:
+                result = query(project, "Value.swift", {"line": 2, "character": len("    _ = value.")},
+                               "completion", Path(tmp).resolve())
+            finally:
+                signal.alarm(0)
+        self.assertEqual(result["status"], "ok", result)
+        self.assertTrue(any("pocketMarker" in item["label"] for item in result["items"]), result)
+
     def test_go_to_local_definition_from_reference(self):
         source = "func add() -> Int {\n    let pocketLocal = 41\n    return pocketLocal + 1\n}\n"
         project = {"files": {"Arithmetic.swift": source}}

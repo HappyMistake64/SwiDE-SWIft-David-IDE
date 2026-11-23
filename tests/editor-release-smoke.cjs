@@ -104,6 +104,7 @@ async function chooseSwiftFile(page, name, contents) {
     assert.equal(await upgrade.evaluate(() => window.pocketIDE.getActive()), oldProject.active);
     assert.deepEqual(await upgrade.evaluate(() => window.pocketIDE.getProject()), oldProject.project);
     assert.equal(await upgrade.locator("#ide-title").textContent(), oldProject.settings.appName);
+    assert.equal(await upgrade.locator("#repo").inputValue(), "HappyMistake64/SwiDE-SWIft-David-IDE");
     await upgrade.close();
     assert.deepEqual(errors, []);
     console.log("Project navigator, persistent editing, local import, collision handling, quick open and narrow navigation passed.");

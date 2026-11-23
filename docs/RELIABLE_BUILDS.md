@@ -22,7 +22,7 @@ The Python 3.12 stdlib-only resolver reads GitHub Actions REST API. It never exe
 
 ~~~sh
 GH_TOKEN=... python3 native-build/build_manager.py \
-  --repo HappyMistake64/Xcode-for-iphone \
+  --repo HappyMistake64/SwiDE-SWIft-David-IDE \
   --request-id 'a7612db1-a3fc-4e61-963c-cc11fedf4d20' \
   --source-sha 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 ~~~

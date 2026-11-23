@@ -4,19 +4,19 @@ Created by David Volf.
 
 Mobilní vývojové prostředí pro tvorbu Swift/SwiftUI aplikací z iPhonu s kompilací přes GitHub Actions na vzdáleném Macu.
 
-## Mobilní IDE
+## Mobilní IDE 0.4.2
 
-[Stáhnout aktuální editor](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/SwiDe.ipa) · [Rozsah funkcí a rozdíly oproti Xcode](docs/XCODE-PARITA.md)
+[Stáhnout aktuální editor](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/releases/latest/download/SwiDe.ipa) · [Rozsah funkcí a rozdíly oproti Xcode](docs/XCODE-PARITA.md)
 
 V navigátoru **Soubory** přidáš tlačítkem **+** jednotlivé soubory z aplikace Soubory na iPhonu. U zdrojového kódu vyber UTF-8 soubor s příponou `.swift`. Můžeš vybrat více souborů najednou. Ve výchozím nastavení se Swift přidá do kořene projektu ve SwiDe a podporované obrázky a datové soubory do `Resources/`. Pokud už některá cesta v projektu existuje, celý výběr se zastaví před zápisem. Projekt ve SwiDe pojme až 200 souborů v celkovém limitu 4 MB včetně zakódovaných prostředků. Pro původní projekt se zachováním uspořádání složek použij import ZIP.
 
 V paletě příkazů zvol **Rychle otevřít** a napiš například `ContentView.swift:12`. Nástroje editoru umí přesouvat řádky, měnit velikost písmen a vybírat párové závorky.
 
-V panelu Projekt můžeš sestavit podporované původní ZIP projekty se sdíleným schématem, porovnat změny, procházet historii větví, spravovat obrázky a upravovat lokalizace včetně existujících plurálů. Editor nabízí vzdálené dotazy SourceKit, konzole načítá výsledky XCTest, pokrytí kódu po souborech a diagnostiku. Pro ladění při startu podporuje simulátor jednorázový záznam LLDB s otevřením příslušného řádku. Náhled umožňuje pořídit světlou i tmavou variantu obrazovky. Vzdálené operace vyžadují připojení a schválení odeslání zdrojů.
+V panelu Soubory můžeš sestavit podporované původní ZIP projekty se sdíleným schématem, porovnat změny, procházet historii větví, spravovat obrázky a upravovat lokalizace včetně existujících plurálů. Editor nabízí vzdálené dotazy SourceKit, konzole načítá výsledky XCTest, pokrytí kódu po souborech a diagnostiku. Pro ladění při startu podporuje simulátor jednorázový záznam LLDB s otevřením příslušného řádku. Náhled umožňuje pořídit světlou i tmavou variantu obrazovky. Vzdálené operace vyžadují připojení a schválení odeslání zdrojů.
 
 ## Historie verze 0.2.0
 
-Starší vydání editoru byla publikována pod názvem Xcode Pocket. [Historie vydání](https://github.com/HappyMistake64/Xcode-for-iphone/releases)
+Starší vydání editoru byla publikována pod názvem Xcode Pocket. [Historie vydání](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/releases)
 
 Editor otevírá naposledy upravovaný Swift soubor. Navigátor, hledání v projektu, paleta příkazů, lexikální zvýraznění, seznam symbolů, historie úprav a lokální kontrolní bod fungují na zařízení. Nastavení GitHubu je v panelu Projekt. JSON projektu může obsahovat podporované obrázky a složky schématu v3.
 
@@ -63,7 +63,7 @@ Kompilace probíhá v cloudu, ne přímo na procesoru iPhonu. Vyžaduje připoje
 
 Použití aktuálního workflow
 
-V editoru nastavte repozitář HappyMistake64/Xcode-for-iphone, větev main, název aplikace a Bundle ID. Ověřte připojení, dostupnost workflow a odešlete Swift projekt ke kompilaci. Výsledek ověřujte také na kartě Actions.
+V editoru nastavte repozitář HappyMistake64/SwiDE-SWIft-David-IDE, větev main, název aplikace a Bundle ID. Ověřte připojení, dostupnost workflow a odešlete Swift projekt ke kompilaci. Výsledek ověřujte také na kartě Actions.
 
 Při ručním spuštění workflow musí snímek projektu již existovat v zadaném commitu:
 
@@ -123,7 +123,7 @@ Podpis je samostatný krok po kompilaci. Dosud nebyl objednán ani ověřen žá
 
 Neexistuje zde implementované obejití kontroly podpisu iOS. Kompletně bezplatná instalace jen z telefonu není ověřeným výsledkem projektu.
 
-Roadmapa a kritéria dokončení
+Historická roadmapa prototypu
 
 ☐ Zkontrolovat obsah úspěšného artefaktu, nejen stav workflow.
 ◐ Nový samostatný editor uchovává identitu buildu i po obnovení stránky a má regresní testy. Živý Safari E2E průchod je nutné ještě ověřit; starší externí editor se nemění.
@@ -159,4 +159,4 @@ Xcode je ochranná známka společnosti Apple Inc. SwiDe je nezávislý projekt 
 
 ## English overview
 
-SwiDe is an iPhone-first Swift editor by David Volf. Edit files on the device and submit a snapshot to a GitHub Actions macOS runner to compile an iOS app. The editor is available as a web app and as an IPA for SideStore. [Open the web editor](https://happymistake64.github.io/Xcode-for-iphone/) · [Download SwiDe.ipa](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/SwiDe.ipa)
+SwiDe is an iPhone-first Swift editor by David Volf. Edit files on the device and submit a snapshot to a GitHub Actions macOS runner to compile an iOS app. The editor is available as a web app and as an IPA for SideStore. [Open the web editor](https://happymistake64.github.io/SwiDE-SWIft-David-IDE/) · [Download SwiDe.ipa](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/releases/latest/download/SwiDe.ipa)

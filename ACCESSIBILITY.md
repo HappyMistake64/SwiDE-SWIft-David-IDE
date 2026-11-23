@@ -14,4 +14,4 @@ U verze 0.4.0 automatické testy kontrolovaly navigaci při šířce 320 pixelů
 
 ## Jak nahlásit překážku
 
-[Otevři hlášení chyby](https://github.com/HappyMistake64/Xcode-for-iphone/issues/new?template=bug_report.md). Stačí napsat například „Po přidání souboru nevím, kam se přesunul fokus.“ Doplň zařízení, verzi iOS, prostředí (Safari nebo aplikace), použitou pomůcku a krok, kde problém nastal. U VoiceOveru pomůže přesné znění toho, co přečetl. Snímek obrazovky je nepovinný.
+[Otevři hlášení chyby](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/issues/new?template=bug_report.md). Stačí napsat například „Po přidání souboru nevím, kam se přesunul fokus.“ Doplň zařízení, verzi iOS, prostředí (Safari nebo aplikace), použitou pomůcku a krok, kde problém nastal. U VoiceOveru pomůže přesné znění toho, co přečetl. Snímek obrazovky je nepovinný.

@@ -1,3 +1,5 @@
+import {sameRepository} from "./core.mjs";
+
 // Inspect a report exported with the build logs; keep it bound to its verified run.
 (() => {
   const panel = document.getElementById("issues");
@@ -36,7 +38,7 @@
   function selected() { return available().find(b => key(b) === picker.value); }
   function validate(report, build) {
     const i = report?.identity;
-    if (report?.schema !== "xcode-pocket-issues/v1" || report.repository !== build.repo ||
+    if (report?.schema !== "xcode-pocket-issues/v1" || !sameRepository(report.repository,build.repo) ||
       i?.schema !== "xcode-pocket-build-identity/v1" || i.request_id !== build.request_id ||
       i.source_sha !== build.source_sha || i.workflow_run_id !== Number(build.run_id) ||
       i.workflow !== ".github/workflows/pocket-ios.yml" || i.project_path !== "pocket-builds/"+build.request_id+".json" ||

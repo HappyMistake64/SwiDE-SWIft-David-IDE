@@ -253,3 +253,17 @@ test("plain v1/v2 text and v3 non-catalog images remain supported", () => {
   ]) project.binaries["Resources/" + name] = {mime, base64:btoa(bytes)};
   assert.equal(validateProject(project),project);
 });
+
+
+test("the renamed repository reconnects and recognizes previous builds", async () => {
+  const old = "HappyMistake64/Xcode-for-iphone";
+  const saved = restoreState(JSON.stringify({project:newProject(),settings:{repo:old},builds:[{...identity(),repo:old}]}));
+  assert.equal(saved.settings.repo, REPOSITORY);
+  assert.equal(matchesRun(run(saved.builds[0]), saved.builds[0]), true);
+  assert.equal(matchesRun(run(saved.builds[0],21,{repository:{full_name:"Other/SwiDE-SWIft-David-IDE"}}), saved.builds[0]), false);
+  const api = new GithubAPI("token", old, async url => {
+    assert.equal(url, "https://api.github.com/repos/" + REPOSITORY);
+    return new Response(JSON.stringify({full_name:REPOSITORY,permissions:{push:true}}));
+  });
+  await api.verifyAccess();
+});

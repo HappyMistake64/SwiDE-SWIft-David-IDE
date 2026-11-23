@@ -1,3 +1,5 @@
+import {sameRepository} from "./core.mjs";
+
 // Submit a user-approved snapshot to the existing original Xcode project workflows.
 const BUILD_LIMIT = 20 * 1024 * 1024;
 const SHA = /^[0-9a-f]{40}$/;
@@ -84,7 +86,7 @@ export async function submitOriginal({api,archive,choice,mode,approved,onRecord 
 }
 
 export async function findOriginalResult(api,record) {
-  requireValue(api && api.repo===record.repo && Object.hasOwn(MODES,record.mode) && SHA.test(record.commit) && UUID.test(record.id),
+  requireValue(api && sameRepository(api.repo,record.repo) && Object.hasOwn(MODES,record.mode) && SHA.test(record.commit) && UUID.test(record.id),
     "Připoj stejný repozitář jako při sestavení.");
   const mode = MODES[record.mode];
   const matches = [];
@@ -95,7 +97,7 @@ export async function findOriginalResult(api,record) {
     const runs = data.workflow_runs || [];
     matches.push(...runs.filter(run=>run.event==="workflow_dispatch" && run.head_branch==="main" &&
       (run.display_title===snapshotTitle || (run.display_title===legacyTitle && run.head_sha===record.commit)) &&
-      run.repository?.full_name?.toLowerCase()===record.repo.toLowerCase() && Number.isSafeInteger(run.id)));
+      sameRepository(run.repository?.full_name,record.repo) && Number.isSafeInteger(run.id)));
     if (runs.length<100) break;
   }
   if (!matches.length) return null;

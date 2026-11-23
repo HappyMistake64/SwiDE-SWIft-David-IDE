@@ -1,5 +1,16 @@
 // SwiDe browser protocol shared by the UI and Node tests.
-export const REPOSITORY = "HappyMistake64/Xcode-for-iphone";
+export const REPOSITORY = "HappyMistake64/SwiDE-SWIft-David-IDE";
+const LEGACY_REPOSITORY = "HappyMistake64/Xcode-for-iphone";
+
+function canonicalRepository(name) {
+  const key = name.toLowerCase();
+  return key === LEGACY_REPOSITORY.toLowerCase() || key === REPOSITORY.toLowerCase() ? REPOSITORY : name;
+}
+
+export function sameRepository(a, b) {
+  return typeof a === "string" && typeof b === "string" &&
+    canonicalRepository(a).toLowerCase() === canonicalRepository(b).toLowerCase();
+}
 export const WORKFLOW = ".github/workflows/pocket-ios.yml";
 export const STORAGE_KEY = "xcode-pocket-standalone-v1";
 export const SHA_RE = /^[a-f0-9]{40}$/;
@@ -162,7 +173,7 @@ export function validateSettings(s) {
   if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[A-Za-z0-9_.-]+$/.test(repo)) throw Error("Repozitář musí být owner/repo.");
   if (!/^[A-Za-z][A-Za-z0-9 ._-]{0,59}$/.test(appName)) throw Error("Neplatný název aplikace.");
   if (!/^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*){2,}$/.test(bundleId)) throw Error("Neplatné Bundle ID.");
-  return {repo,appName,bundleId};
+  return {repo:canonicalRepository(repo),appName,bundleId};
 }
 
 export function makeRequest(s, project, id = crypto.randomUUID()) {
@@ -191,8 +202,8 @@ export function matchesRun(run,r) {
   return !!run && Number.isSafeInteger(run.id) && run.id>0 &&
     run.display_title==="Pocket iOS " + r.request_id &&
     run.event==="workflow_dispatch" && String(run.path||"").split("@")[0]===WORKFLOW &&
-    run.repository?.full_name===r.repo &&
-    (!run.head_repository || run.head_repository.full_name===r.repo);
+    sameRepository(run.repository?.full_name,r.repo) &&
+    (!run.head_repository || sameRepository(run.head_repository.full_name,r.repo));
 }
 
 export function pickRun(runs,r,expectedId=null) {
@@ -240,14 +251,14 @@ export class GithubAPI {
   async check(){return this.request("GET","");}
   async verifyAccess(){
     const repository=await this.check();
-    if (String(repository?.full_name||"").toLowerCase()!==this.repo.toLowerCase())
+    if (!sameRepository(repository?.full_name,this.repo))
       throw Error("GitHub vrátil jiný repozitář.");
     if (repository?.permissions?.push===false)
       throw Error("Token má k repozitáři jen přístup pro čtení. Povol Contents: Read/Write.");
     return repository;
   }
   async snapshot(r,p){
-    if (r.repo!==this.repo) throw Error("Repozitář nesouhlasí.");
+    if (!sameRepository(r.repo,this.repo)) throw Error("Repozitář nesouhlasí.");
     const result=await this.request("PUT","/contents/"+r.project_path,{
       message:"build: "+r.request_id,content:utf8Base64(JSON.stringify(validateProject(p))),branch:"main"});
     if (!SHA_RE.test(result?.commit?.sha)) throw Error("GitHub nevrátil commit SHA.");
@@ -255,7 +266,7 @@ export class GithubAPI {
   }
   async dispatch(r) {
     assertIdentity(r);
-    if (r.repo!==this.repo) throw Error("Repozitář nesouhlasí.");
+    if (!sameRepository(r.repo,this.repo)) throw Error("Repozitář nesouhlasí.");
     return this.request("POST","/actions/workflows/pocket-ios.yml/dispatches",{
       ref:"main",inputs:{source_sha:r.source_sha,request_id:r.request_id,
         project_path:r.project_path,app_name:r.appName,bundle_id:r.bundleId,

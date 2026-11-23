@@ -1,6 +1,6 @@
 import {
   STORAGE_KEY, REPOSITORY, GithubAPI, newProject, makeRequest, validateProject,
-  validateSettings, restoreState, reconcileArtifacts, validPath
+  validateSettings, restoreState, reconcileArtifacts, validPath, sameRepository
 } from "./core.mjs";
 
 const byId = id => document.getElementById(id);
@@ -138,6 +138,7 @@ async function connect() {
     const token=byId("connect-token").value.trim();
     if (!token) throw Error("Vlož GitHub token do pole nad tímto tlačítkem.");
     const candidate=new GithubAPI(token,state.settings.repo);
+    byId("repo").value=candidate.repo;
     const repo=await candidate.verifyAccess();
     api=candidate;
     byId("connect-token").value="";
@@ -211,7 +212,7 @@ async function submit(capturePreview = false) {
 }
 async function refreshBuild(item) {
   if (!api) return note("Znovu připoj GitHub token po obnovení stránky.","error");
-  if (!item.source_sha) return;
+  if (!item.source_sha || !sameRepository(item.repo,api.repo)) return;
   try {
     const located=await api.findRun(item);
     if (located.state!=="found") {

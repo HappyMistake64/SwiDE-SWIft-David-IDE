@@ -1,10 +1,10 @@
 # SwiDe — mobilní editor
 
-Adresář `web/` obsahuje rozhraní editoru pro Safari a pro nativní aplikaci SwiDe. [Otevřít webovou verzi](https://happymistake64.github.io/Xcode-for-iphone/) · [Stáhnout SwiDe.ipa](https://github.com/HappyMistake64/Xcode-for-iphone/releases/latest/download/SwiDe.ipa)
+Adresář `web/` obsahuje rozhraní editoru pro Safari a pro nativní aplikaci SwiDe. [Otevřít webovou verzi](https://happymistake64.github.io/SwiDE-SWIft-David-IDE/) · [Stáhnout SwiDe.ipa](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/releases/latest/download/SwiDe.ipa)
 
 ## Funkce
 - Úpravy SwiftUI souborů, více souborů, lokální autosave, import/export JSON.
-- GitHub API commit snímku do pocket-builds/UUID.json a spuštění Pocket iOS workflow.
+- GitHub API commit snímku do pocket-builds/UUID.json a spuštění workflow SwiDe iOS build.
 - Trvalé UUID požadavku, SHA commitu a run ID přežijí obnovení stránky.
 - Přísné párování běhu a identitního artefaktu zabraňuje záměně mezi projekty.
 - GitHub Actions run obsahuje ZIP s unsigned .app a unsigned .ipa.
@@ -18,7 +18,7 @@ Workflow `.github/workflows/pocket-pages.yml` publikuje `web/` při změnách na
 
 ## Přihlášení
 
-Na https://github.com/settings/personal-access-tokens/new vytvoř fine-grained PAT pouze pro HappyMistake64/Xcode-for-iphone. Požadované oprávnění Contents: Read/Write a Actions: Read/Write. Nevkládej token do chatu ani do Swift souborů. Token se v editoru nikdy neukládá do localStorage; po reloadu je nutné jej znovu vložit.
+Na https://github.com/settings/personal-access-tokens/new vytvoř fine-grained PAT pouze pro HappyMistake64/SwiDE-SWIft-David-IDE. Požadované oprávnění Contents: Read/Write a Actions: Read/Write. Nevkládej token do chatu ani do Swift souborů. Token se v editoru nikdy neukládá do localStorage; po reloadu je nutné jej znovu vložit.
 
 Repozitář je veřejný! Snímky projektů commitnuté do pocket-builds/ jsou veřejně čitelné. Žádné klíče, osobní údaje ani hesla neposílej jako zdrojový kód.
 

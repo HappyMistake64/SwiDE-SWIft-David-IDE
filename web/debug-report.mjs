@@ -1,3 +1,5 @@
+import {sameRepository} from "./core.mjs";
+
 const debugSpec = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,119}\.swift:[1-9][0-9]{0,5}$/;
 const stringAtMost = (s,n) => typeof s === "string" && s.length <= n;
 const positive = n => Number.isSafeInteger(n) && n > 0;
@@ -11,7 +13,7 @@ export function validateDebugReport(report, build) {
       identity.workflow !== ".github/workflows/pocket-ios.yml" ||
       identity.workflow_run_id !== Number(build.run_id) || !positive(identity.workflow_attempt) ||
       identity.workflow_attempt !== Number(build.run_attempt) ||
-      (report.repository !== undefined && report.repository !== build.repo))
+      (report.repository !== undefined && !sameRepository(report.repository,build.repo)))
     throw Error("Report LLDB patří k jinému běhu nebo pokusu.");
   const spec = report.breakpoint?.file + ":" + report.breakpoint?.line;
   if (!debugSpec.test(spec) || !positive(report.breakpoint.line) || spec !== build.debugAt)

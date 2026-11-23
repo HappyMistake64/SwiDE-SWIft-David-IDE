@@ -1,4 +1,4 @@
-import {makeRequest, SHA_RE, UUID_RE} from "./core.mjs";
+import {makeRequest, SHA_RE, UUID_RE, sameRepository} from "./core.mjs";
 import {openZipWorkspace} from "./zip-workspace.mjs";
 
 const WORKFLOW = "pocket-language.yml";
@@ -36,14 +36,14 @@ export function validateLanguageResult(result, record) {
 }
 
 export async function findLanguageRun(api, record) {
-  if (!api || api.repo !== record?.repo || !UUID_RE.test(record.request_id) || !SHA_RE.test(record.source_sha))
+  if (!api || !sameRepository(api.repo,record?.repo) || !UUID_RE.test(record.request_id) || !SHA_RE.test(record.source_sha))
     throw Error("Připoj stejný GitHub repozitář jako při odeslání dotazu.");
   const candidates = [];
   for (let page=1; page<=5; page++) {
     const data = await api.request("GET", "/actions/workflows/" + WORKFLOW + "/runs?event=workflow_dispatch&branch=main&per_page=100&page=" + page);
     const runs = data.workflow_runs || [];
     candidates.push(...runs.filter(r => r.display_title === "Pocket SourceKit " + record.request_id &&
-      r.repository?.full_name?.toLowerCase() === api.repo.toLowerCase() && Number.isSafeInteger(r.id) &&
+      sameRepository(r.repository?.full_name,api.repo) && Number.isSafeInteger(r.id) &&
       r.event === "workflow_dispatch" && r.head_branch === "main" &&
       String(r.path || "").split("@")[0] === ".github/workflows/" + WORKFLOW));
     if (runs.length < 100) break;

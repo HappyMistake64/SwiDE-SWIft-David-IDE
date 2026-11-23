@@ -4,7 +4,7 @@ K hlášení chyby nebo návrhu na zlepšení ti stačí iPhone a účet na GitH
 
 ## Chyby a návrhy
 
-V [nabídce hlášení](https://github.com/HappyMistake64/Xcode-for-iphone/issues/new/choose) vyber chybu nebo návrh funkce. U chyby pomůže přesný sled klepnutí, verze aplikace a rozdíl mezi očekávaným a skutečným výsledkem. U návrhu popiš, co chceš na iPhonu udělat a kde se dnes zastavíš. Pro otázky můžeš použít [Discussions](https://github.com/HappyMistake64/Xcode-for-iphone/discussions).
+V [nabídce hlášení](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/issues/new/choose) vyber chybu nebo návrh funkce. U chyby pomůže přesný sled klepnutí, verze aplikace a rozdíl mezi očekávaným a skutečným výsledkem. U návrhu popiš, co chceš na iPhonu udělat a kde se dnes zastavíš. Pro otázky můžeš použít [Discussions](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/discussions).
 
 Pokud se hlášení týká úniku tokenu, cizího kódu nebo přístupu k jinému sestavení, postupuj podle [bezpečnostních pravidel](SECURITY.md). Překážky při ovládání s asistivní technologií popisuje [stránka přístupnosti](ACCESSIBILITY.md).
 

@@ -141,7 +141,9 @@ REA a původ projektu
 
 Původní výzkumný záměr používal REA k prozkoumání Xcode. Analýza macOS binárek nepředstavuje jejich automatický převod na iOS. Tento repozitář neposkytuje Apple Xcode, SDK ani jeho proprietární zdrojové kódy. Aktuální praktická cesta používá Xcode na vzdáleném macOS runneru.
 
-Přispívání a hlášení chyb
+## Přispívání a hlášení chyb
+
+[Pokyny pro přispěvatele](CONTRIBUTING.md) · [Pravidla komunity](CODE_OF_CONDUCT.md) · [Soukromé hlášení zranitelnosti](SECURITY.md) · [Přístupnost](ACCESSIBILITY.md)
 
 Do issue přiložte očekávané a skutečné chování, kroky reprodukce, verzi iOS/prohlížeče a odkaz na příslušný GitHub Actions běh. U problému s generátorem použijte minimální reprodukovatelný JSON bez soukromých údajů. U dokumentace rozlišujte ověřené funkce, známé problémy a návrhy.
 

@@ -22,7 +22,7 @@ sdk_path="$(xcrun --sdk iphoneos --show-sdk-path)"
 xcrun --sdk iphoneos clang -target "arm64-apple-ios$min_ios" -isysroot "$sdk_path" \
     -fobjc-arc -fmodules -Os "$native_dir/Editor.m" \
     -framework UIKit -framework WebKit -framework Foundation -o "$app_dir/XcodePocketEditor"
-xcrun lipo -verify_arch arm64 "$app_dir/XcodePocketEditor"
+xcrun lipo "$app_dir/XcodePocketEditor" -verify_arch arm64
 
 # SideStore replaces this ad hoc signature with the user's development signature.
 codesign --force --sign - --timestamp=none "$app_dir"

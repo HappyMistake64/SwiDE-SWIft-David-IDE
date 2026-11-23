@@ -74,8 +74,12 @@
     </section>
     <section class="panel next">
       <div class="panel-heading"><div><small>04 / DEVICE INSTALLATION</small><h2>Instalace na iPhone</h2></div><span class="tag">Podpis vyžadován</span></div>
-      <p>GitHub Actions vrátí <strong>nepodepsanou IPA</strong> a ZIP aplikace. Soubor IPA můžeš předat legitimní podpisové službě. Bez podpisu a provisioning profilu ji iOS nenainstaluje.</p>
-      <p class="small muted">Alternativou je Apple Developer Program, TestFlight nebo Xcode Personal Team (vyžaduje Xcode a obnovování podpisu). Přímá instalace bez těchto podmínek není podporována.</p>
+      <ol>
+        <li>Po úspěšném sestavení klepni u své kompilace na <strong>Stáhnout ZIP s IPA</strong>. V Safari se případně přihlas ke GitHubu.</li>
+        <li>V aplikaci Soubory rozbal stažený ZIP. Uvnitř najdeš <strong>PocketApp-unsigned.ipa</strong>.</li>
+        <li>Připoj iPhone k Wi-Fi, zapni LocalDevVPN a v nastaveném SideStore otevři <strong>My Apps → +</strong>. Vyber soubor IPA a po dokončení otevři aplikaci z plochy.</li>
+      </ol>
+      <p class="small muted">Při prvním nastavení SideStore potřebuješ počítač. S bezplatným Apple účtem obnov podpis před uplynutím sedmi dnů. <a href="https://docs.sidestore.io/docs/installation/prerequisites">Návod SideStore</a></p>
     </section>
   </main>
   <footer>Independent project · Not affiliated with Apple · <a href="https://github.com/HappyMistake64/Xcode-for-iphone" target="_blank" rel="noopener noreferrer">Source on GitHub</a></footer>

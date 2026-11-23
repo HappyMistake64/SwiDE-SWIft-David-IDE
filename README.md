@@ -42,7 +42,7 @@ Repozitář obsahuje build backend a nový samostatný mobilní editor ve složc
 
 Ověřený stav k 12. 11. 2026
 
-• Workflow Pocket iOS build používá macos-26, timeout 15 minut a xcodebuild.
+• Workflow SwiDe iOS build používá macos-26, timeout 15 minut a xcodebuild.
 • Běh 43123517253 skončil success. Dokládá kompilaci ukázkové aplikace, nikoli instalaci celého editoru.
 • Generátor v5 podporuje schéma projektu v1–v3; v3 umí ověřené base64 obrázky a omezené image sety Assets.xcassets.
 • Workflow generuje PocketApp-unsigned.app.zip a strukturovanou PocketApp-unsigned.ipa; oba výstupy jsou NEPODEPSANÉ. Test balení a kompilace na macOS je ověřený.

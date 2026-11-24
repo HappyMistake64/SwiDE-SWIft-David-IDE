@@ -22,23 +22,27 @@ async function chooseDeviceFile(page, name, contents) {
 
 async function assertPrivateResultUI(browser, htmlURL) {
   const {fixture} = await import("./private-github-fixture.mjs");
-  const {BUILDER_SHA} = await import("../web/build-pins.mjs");
-  const {newProject} = await import("../web/core.mjs");
+  const {newProject, makeRequest, GithubAPI} = await import("../web/core.mjs");
   const {exportZipWorkspace} = await import("../web/zip-workspace.mjs");
   const {createHash} = require("node:crypto");
   const {readFile} = require("node:fs/promises");
   const hash = bytes => createHash("sha256").update(bytes).digest("hex");
   const gh = fixture();
   const sample = require("./fixtures/private-result.json");
-  const request = {...sample.request, repo:gh.repo, repository_id:gh.metadata.id,
-    owner_id:gh.user.id, actor_id:gh.user.id, workflow_id:gh.state.workflow.id,
-    caller_sha:gh.caller, builder_sha:BUILDER_SHA, appName:"Fixture",
-    bundleId:"cz.example.fixture", stage:"dispatched"};
-  const run = {...sample.run, head_sha:gh.caller, repository:gh.metadata, head_repository:gh.metadata,
+  const project = newProject();
+  const request = makeRequest({repo:gh.repo,appName:"Fixture",bundleId:"cz.example.fixture"}, project, sample.request.request_id);
+  const client = new GithubAPI("fixture", gh.repo, gh.fetcher);
+  await client.prepare(request, project);
+  request.source_sha = await client.snapshot(request, project);
+  request.run_id = sample.run.id;
+  request.stage = "dispatched";
+  const run = {...sample.run, head_sha:request.caller_sha, repository:gh.metadata, head_repository:gh.metadata,
+    display_title:`SwiDe ${request.request_id} ${request.source_sha} ${request.manifest_sha256}`,
     workflow_id:request.workflow_id, actor:gh.user, triggering_actor:gh.user};
   const ipa = "synthetic-ipa";
-  const receipt = {...sample.receipt, builder_sha:BUILDER_SHA, caller_sha:gh.caller,
-    repository_id:gh.metadata.id, owner_id:gh.user.id, workflow_id:request.workflow_id, ipa_sha256:hash(ipa)};
+  const receipt = {...sample.receipt, builder_sha:request.builder_sha, caller_sha:request.caller_sha,
+    source_sha:request.source_sha, manifest_sha256:request.manifest_sha256, input_sha256:request.input_sha256,
+    repository_id:request.repository_id, owner_id:request.owner_id, workflow_id:request.workflow_id, ipa_sha256:hash(ipa)};
   const zip = Buffer.from(await exportZipWorkspace([{path:"build-identity.json",edit:JSON.stringify(receipt)},
     {path:"PocketApp-unsigned.ipa",edit:ipa}]).arrayBuffer());
   const artifact = {...sample.artifact,size_in_bytes:zip.length,digest:"sha256:"+hash(zip),

@@ -157,9 +157,11 @@ export class PrivateBuildTarget {
     this.#binding = binding;
     return repository;
   }
-  async #tree(sha) {
+  async #tree(sha, requireRoot = false) {
     const commit = await this.#send("GET", "/git/commits/" + sha);
     requireBuild(commit?.sha === sha && HEX40.test(commit.tree?.sha), "Nepotvrzený commit nebo strom.");
+    if (requireRoot) requireBuild(Array.isArray(commit.parents) && commit.parents.length === 0,
+      "Reference požadavku neukazuje na samostatný datový commit.");
     const tree = await this.#send("GET", "/git/trees/" + commit.tree.sha + "?recursive=1");
     requireBuild(tree?.sha === commit.tree.sha, "GitHub vrátil jiný strom.");
     return tree;
@@ -235,13 +237,19 @@ export class PrivateBuildTarget {
       requireBuild(head, "GitHub nepotvrdil referenci snímku.");
     }
     if (r.source_sha) requireBuild(head === r.source_sha, "Reference uloženého snímku se změnila.");
-    this.#checkTree(await this.#tree(head), files);
+    this.#checkTree(await this.#tree(head, true), files);
     return head;
+  }
+  async #verifyRecord(r) {
+    assertSourceIdentity(r);
+    const digest = await hexDigest("SHA-256", encoder.encode(JSON.stringify(requestManifest(r))));
+    requireBuild(digest === r.manifest_sha256, "Uložené volby nesouhlasí s identitou sestavení.");
+    await this.verifyAccess(r);
   }
   async dispatch(r) {
     assertSourceIdentity(r);
     requireBuild(!r.run_id && r.stage === "dispatching", "Před spuštěním musí být uložen stav dispatching.");
-    await this.verifyAccess(r);
+    await this.#verifyRecord(r);
     requireBuild(await this.#snapshotHead(r) === r.source_sha, "Soukromá reference se změnila.");
     const answer = await this.#send("POST", WORKFLOW_API + "/dispatches", {ref:r.caller_branch,
       inputs:{request_id:r.request_id, source_sha:r.source_sha, manifest_sha256:r.manifest_sha256}});
@@ -254,8 +262,7 @@ export class PrivateBuildTarget {
     return this.#send("GET", "/actions/runs/" + id);
   }
   async findRun(r) {
-    assertSourceIdentity(r);
-    await this.verifyAccess(r);
+    await this.#verifyRecord(r);
     if (r.run_id != null) return pickPrivateRun([await this.getRun(r.run_id)], r, r.run_id);
     const matches = [];
     for (let page=1; page<=5; page++) {

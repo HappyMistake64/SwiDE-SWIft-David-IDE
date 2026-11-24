@@ -1,7 +1,10 @@
 import {
-  STORAGE_KEY, REPOSITORY, GithubAPI, newProject, makeRequest, validateProject,
-  validateSettings, restoreState, reconcileArtifacts, validPath, sameRepository
+  STORAGE_KEY, GithubAPI, makeRequest, validateProject,
+  validateSettings, restoreState, validPath, sameRepository
 } from "./core.mjs";
+
+import {selectBuildArtifact, verifyBuildResult} from "./build-result.mjs";
+import {uploadDrafts, sendPreparedBuild} from "./build-session.mjs";
 
 const byId = id => document.getElementById(id);
 const local = restoreState(localStorage.getItem(STORAGE_KEY));
@@ -49,79 +52,112 @@ function renderFiles() {
   window.dispatchEvent(new Event("pocket-render"));
 }
 const buildStatus = {
-  prepared:"Připravuji", committed:"Uloženo na GitHubu", dispatched:"Odesláno", queued:"Ve frontě",
-  in_progress:"Probíhá", running:"Probíhá", success:"Hotovo", failed:"Selhalo",
-  awaiting:"Čeká na GitHub", missing:"Chybí výstup", mismatch:"Výsledek nesouhlasí",
-  ambiguous:"Více možných výsledků", submission_uncertain:"Odeslání je třeba ověřit", snapshot_failed:"Odeslání selhalo"
+  prepared:"Připraveno v telefonu", committed:"Snímek uložen", dispatching:"Odesílání požadavku",
+  dispatched:"Odesláno", queued:"Ve frontě", in_progress:"Probíhá", running:"Probíhá",
+  awaiting:"Čeká na GitHub", ready:"Ke stažení a ověření", failed:"Selhalo",
+  mismatch:"Výsledek nesouhlasí", ambiguous:"Více odpovídajících běhů", attempt_changed:"Nový pokus",
+  submission_uncertain:"Odeslání je třeba ověřit", snapshot_failed:"Přerušený přenos snímku",
+  historical:"Historický záznam před verzí 0.6"
 };
-function renderBuilds() {
-  window.dispatchEvent(new Event("pocket-builds"));
-  const wrapper=byId("builds");
-  wrapper.replaceChildren();
-  const previews=byId("preview-results");
-  previews.replaceChildren();
-  if (!state.builds.length) {
-    wrapper.append(htmlEl("p","muted","Zatím žádná kompilace. První build spustíš tlačítkem Sestavit."));
+const bindingKey = repo => "swide-private-target-v2:" + repo.toLowerCase();
+const receipts = new Map();
+const working = new Set();
+let verifiedIPA = null;
+function isCurrent(item) {
+  return item.schema === "swide-build-request/v2" && item.mode === "generated" &&
+    api && sameRepository(item.repo, api.repo) && api.binding?.repository_id === item.repository_id;
+}
+function button(label, run) {
+  const el = htmlEl("button", "secondary", label);
+  el.type = "button";
+  el.addEventListener("click", run);
+  return el;
+}
+function external(label, url) {
+  const link = htmlEl("a", "small external", label);
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  return link;
+}
+function exportVerified(result) {
+  const bridge = window.webkit?.messageHandlers?.exportVerifiedIPA;
+  if (bridge) {
+    const chunks = [];
+    for (let i = 0; i < result.ipaBytes.length; i += 8192) {
+      chunks.push(String.fromCharCode(...result.ipaBytes.subarray(i, i + 8192)));
+    }
+    bridge.postMessage({name:result.filename, base64:btoa(chunks.join(""))});
     return;
   }
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([result.ipaBytes], {type:"application/octet-stream"}));
+  link.download = result.filename;
+  document.body.append(link);
+  link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+}
+function updateBuilds() { persist(); renderBuilds(); }
+function renderBuilds() {
+  window.dispatchEvent(new Event("pocket-builds"));
+  const wrapper = byId("builds");
+  wrapper.replaceChildren();
+  if (!state.builds.length) {
+    wrapper.append(htmlEl("p","muted","Zatím žádná kompilace. První build spustíš tlačítkem Sestavit."));
+  }
   for (const item of state.builds) {
-    const box=htmlEl("article","build-card");
-    const title=htmlEl("div","build-title");
-    title.append(htmlEl("strong","",item.appName+" · "+(buildStatus[item.stage] || item.stage)));
-    title.append(htmlEl("span","muted",new Date(item.created_at).toLocaleString("cs-CZ")));
-    box.append(title);
-    const details=htmlEl("details","build-metadata");
-    details.append(htmlEl("summary","","Podrobnosti"), htmlEl("div","mono","Požadavek "+item.request_id));
-    if (item.source_sha) details.append(htmlEl("div","mono","Commit "+item.source_sha.slice(0,12)));
-    if (item.run_id) details.append(htmlEl("div","mono","GitHub Actions #"+item.run_id));
+    const box = htmlEl("article","build-card");
+    const details = htmlEl("details","build-metadata");
+    const status = verifiedIPA?.item === item ? "Ověřená nepodepsaná IPA" : buildStatus[item.stage] || item.stage;
+    box.append(htmlEl("strong","",item.appName + " · " + status));
+    details.append(htmlEl("summary","","Podrobnosti"), htmlEl("div","mono","Požadavek " + item.request_id));
+    for (const [label,value] of [["Repozitář",item.repo],["Zdrojové SHA",item.source_sha],
+      ["SHA spouštěče",item.caller_sha],["GitHub Actions",item.run_id],["Pokus",item.run_attempt]]) {
+      if (value) details.append(htmlEl("div","mono", label + " · " + value));
+    }
+    if (item.stage === "historical") box.append(htmlEl("p","small","Starší protokol. Tento záznam se automaticky neobnoví."));
     if (item.message) box.append(htmlEl("p","small",item.message));
-    if (Array.isArray(item.artifacts)&&item.artifacts.length) {
-      const list=htmlEl("div","chips");
-      for (const a of item.artifacts) list.append(htmlEl("span","chip",a.name));
-      details.append(list);
-    }
-    const actions=htmlEl("div","action-row");
-    const refresh=htmlEl("button","secondary","↻ Ověřit");
-    refresh.type="button";
-    refresh.addEventListener("click",()=>void refreshBuild(item));
-    actions.append(refresh);
-    if (item.stage==="success" && Number.isSafeInteger(item.previewArtifact) && Number.isSafeInteger(item.run_id)) {
-      const link=htmlEl("a","external",item.appName+" · Stáhnout snímek běhu #"+item.run_id);
-      link.href="https://github.com/"+encodeURI(item.repo)+"/actions/runs/"+item.run_id+"/artifacts/"+item.previewArtifact;
-      previews.append(link);
-      actions.append(link.cloneNode(true));
-    }
-    const archive = item.artifacts?.find?.(artifact =>
-      artifact.name === "pocket-ios-app-" + item.request_id && !artifact.expired &&
-      Number.isSafeInteger(artifact.id) && artifact.id > 0
-    );
-    if (item.stage === "success" && archive && /^\d+$/.test(item.run_id)) {
-      const download = htmlEl("a", "secondary", "Stáhnout ZIP s IPA");
-      download.href = "https://github.com/" + encodeURI(item.repo) +
-        "/actions/runs/" + item.run_id + "/artifacts/" + archive.id;
-      actions.append(download);
-    }
-    if (item.stage==="ambiguous" || item.stage==="mismatch") {
-      const choose=htmlEl("button","secondary","Zadat Run ID");
-      choose.type="button";
-      choose.addEventListener("click",()=>{
-        const answer=prompt("Zadej přesné GitHub Actions Run ID ze stránky Actions.");
-        if (!answer) return;
-        if (!/^[1-9][0-9]*$/.test(answer) || !Number.isSafeInteger(Number(answer))) return note("Neplatné Run ID.","error");
-        item.run_id=Number(answer);item.stage="dispatched";item.message="";
-        persist();renderBuilds();void refreshBuild(item);
-      });
-      actions.append(choose);
-    }
-    if (Number.isSafeInteger(item.run_id) && item.run_id>0) {
-      const link=htmlEl("a","small external","📦 Otevřít běh a stáhnout artefakty");
-      link.href="https://github.com/"+encodeURI(item.repo)+"/actions/runs/"+item.run_id;
-      link.target="_blank";link.rel="noopener noreferrer";
-      actions.append(link);
+    const actions = htmlEl("div","action-row");
+    if (isCurrent(item) && !working.has(item.request_id)) {
+      const resume = ["prepared","snapshot_failed","committed"].includes(item.stage);
+      if (resume) actions.append(button("Pokračovat s původním snímkem", () => void resumeBuild(item)));
+      else actions.append(button("Obnovit stav", () => void refreshBuild(item)));
+      if (item.stage === "attempt_changed" && item.nextAttempt > item.run_attempt) {
+        actions.append(button("Vybrat pokus " + item.nextAttempt, () => {
+          item.run_attempt = item.nextAttempt;
+          delete item.nextAttempt;
+          delete item.artifact_id;
+          delete item.artifact_digest;
+          item.stage = "dispatched";
+          updateBuilds(); void refreshBuild(item);
+        }));
+      }
+      if (Number.isSafeInteger(item.run_id) && item.run_id > 0) {
+        const runURL = "https://github.com/" + api.repo + "/actions/runs/" + item.run_id;
+        actions.append(external("Otevřít běh na GitHubu", runURL));
+        const archive = receipts.get(item.request_id);
+        if (archive && item.stage === "ready") {
+          actions.append(button("Ověřit stažení IPA", () => void checkArchive(item)));
+          actions.append(external("Stáhnout ZIP na GitHubu", runURL + "/artifacts/" + archive.id));
+          const picker = htmlEl("input");
+          picker.type = "file"; picker.accept = ".zip,application/zip"; picker.hidden = true;
+          picker.addEventListener("change", () => { if (picker.files[0]) void checkArchive(item, picker.files[0]); });
+          actions.append(button("Ověřit ZIP ze Souborů", () => { picker.value = ""; picker.click(); }), picker);
+        }
+      }
+      if (verifiedIPA?.item === item) actions.append(button("Uložit ověřenou IPA", () => {
+        if (isCurrent(item) && verifiedIPA?.item === item) exportVerified(verifiedIPA.result);
+      }));
     }
     box.append(actions,details);
     wrapper.append(box);
   }
+}
+function disconnect() {
+  api = null; verifiedIPA = null; receipts.clear();
+  byId("connection").textContent = "● Nepřipojeno";
+  byId("connection").dataset.connected = "false";
+  renderBuilds();
 }
 function connectionNote(message, type="info") {
   const area=byId("connection-status");
@@ -142,13 +178,18 @@ async function connect() {
   button.disabled=true;
   button.textContent="Ověřuji token…";
   connectionNote("Ověřuji přístup k repozitáři na GitHubu…");
+  disconnect();
   try {
     syncSettings();
     const token=byId("connect-token").value.trim();
     if (!token) throw Error("Vlož GitHub token do pole nad tímto tlačítkem.");
     const candidate=new GithubAPI(token,state.settings.repo);
     byId("repo").value=candidate.repo;
-    const repo=await candidate.verifyAccess();
+    const key = bindingKey(candidate.repo);
+    const previous = localStorage.getItem(key);
+    const repo=await candidate.verifyAccess(previous ? JSON.parse(previous) : null);
+    if (!sameRepository(byId("repo").value.trim(), candidate.repo)) throw Error("Vybraný cíl se mezitím změnil.");
+    localStorage.setItem(key, JSON.stringify(candidate.binding));
     api=candidate;
     byId("connect-token").value="";
     byId("connect-token").type="password";
@@ -156,7 +197,8 @@ async function connect() {
     byId("toggle-token").setAttribute("aria-pressed","false");
     byId("connection").textContent="● Připojeno: "+repo.full_name;
     byId("connection").dataset.connected="true";
-    connectionNote("✅ GitHub připojen. Přístup k repozitáři potvrzen, token zůstává jen v paměti stránky.","success");
+    connectionNote("Soukromý cíl " + repo.full_name + " · Kvóta vlastníka " + repo.owner.login + ". Token je pouze v paměti této relace.","success");
+    renderBuilds();
     note("GitHub připojen; můžeš sestavit aplikaci.","success");
     await refreshAll();
   } catch(err) {
@@ -171,97 +213,137 @@ async function connect() {
   }
 }
 async function submit(capturePreview = false) {
-  if (window.pocketProjectSession?.isClosed()) return;
+  if (window.pocketProjectSession?.isClosed() || busy) return;
+  if (capturePreview) return note("Vzdálený simulátor není ve verzi 0.6 k dispozici.");
   if (document.body.dataset.projectMode === "archive") {
     document.dispatchEvent(new Event("pocket:show-build"));
     return;
   }
-  if (busy) return;
-  busy=true;
-  byId("btn-build").disabled=true;
+  if (!api) {
+    document.dispatchEvent(new Event("pocket:github-required"));
+    return note("Pro soukromé sestavení připoj svůj projektový repozitář.");
+  }
+  busy = true;
+  byId("btn-build").disabled = true;
   try {
-    if (!api) {
-      document.dispatchEvent(new Event("pocket:github-required"));
-      throw Error("Pro vzdálené sestavení nejdřív připoj GitHub.");
-    }
-    saveEditing();syncSettings();validateProject(state.project);
-    if (state.settings.repo!==api.repo) throw Error("Repozitář se změnil, znovu se připoj.");
-    if (!confirm((capturePreview ? "Spustit projekt v simulátoru a uložit snímek obrazovky? " : "") + "Odeslat zdrojové soubory do " + api.repo + " a spustit sestavení na GitHubu? U veřejného repozitáře budou soubory veřejné.")) return;
-    const req=makeRequest(state.settings,state.project);
-    if (capturePreview) {
-      req.capturePreview=true;
-      req.appearance=byId("preview-appearance").value;
-      const where=byId("debug-at").value.trim();
-      if (where) {
-        const match=/^([A-Za-z0-9_][A-Za-z0-9_.-]{0,119}\.swift):([1-9][0-9]{0,5})$/.exec(where);
-        const files=Object.entries(state.project.files).filter(([path])=>path.split("/").pop()===match?.[1] && !path.startsWith("Tests/"));
-        if (!match || files.length!==1 || Number(match[2])>files[0][1].split("\n").length) throw Error("Bod zastavení vyžaduje jednoznačný soubor a existující řádek, například ContentView.swift:12.");
-        req.debugAt=where;
-      }
-    }
+    saveEditing(); syncSettings();
+    const client = api;
+    if (!sameRepository(state.settings.repo, client.repo)) throw Error("Znovu připoj vybraný repozitář.");
+    const frozen = structuredClone(validateProject(state.project));
+    if (!confirm("Sestavit " + state.settings.appName + " v soukromém repozitáři " + client.repo +
+      "? Snímek tam mohou číst jeho členové. Sestavení čerpá kredit vlastníka " + client.binding.owner_id + ".")) return;
+    const req = makeRequest(state.settings, frozen);
+    await client.prepare(req, frozen);
+    await uploadDrafts.put(req.request_id, frozen);
+    state.builds.unshift(req);
+    updateBuilds();
     document.querySelector('[data-view="console"]').click();
-    state.builds.unshift(req);state.builds=state.builds.slice(0,30);persist();renderBuilds();
-    note("Ukládám neměnný snímek projektu do GitHubu...");
-    try {
-      const submitted=JSON.parse(JSON.stringify(state.project));
-      req.source_sha=await api.snapshot(req,submitted);
-      window.dispatchEvent(new CustomEvent("pocket-committed",{detail:{project:submitted,sha:req.source_sha}}));
-      req.stage="committed";persist();renderBuilds();
-      // Persist the source SHA BEFORE dispatch: a network failure must not auto-repeat the build.
-      await api.dispatch(req);
-      req.stage="dispatched";req.message="Požadavek odeslán. Hledám správný běh podle UUID.";
-      persist();renderBuilds();
-      note("Kompilace odeslána. Průběh bude dostupný i po obnovení stránky.","success");
-      await refreshBuild(req);
-    } catch(err) {
-      req.stage=req.source_sha?"submission_uncertain":"snapshot_failed";
-      req.message=errorMessage(err)+(req.source_sha?" — znovu nespouštěj naslepo, nejprve zkontroluj Actions.":"");
-      persist();renderBuilds();throw err;
-    }
-  } catch(err){note(errorMessage(err),"error");}
-  finally {busy=false;byId("btn-build").disabled=false;}
+    await transmit(req, client);
+  } catch (err) { note(errorMessage(err), "error"); }
+  finally { busy = false; byId("btn-build").disabled = false; }
+}
+async function resumeBuild(item) {
+  if (!isCurrent(item) || !confirm("Pokračovat s původním snímkem v " + item.repo + "?")) return;
+  await transmit(item, api);
+}
+async function transmit(item, client) {
+  if (working.has(item.request_id)) return;
+  working.add(item.request_id);
+  renderBuilds();
+  try {
+    await sendPreparedBuild({req:item, client, drafts:uploadDrafts, save:updateBuilds,
+      onCommitted(project, sha) {
+        window.dispatchEvent(new CustomEvent("pocket-committed", {detail:{project,sha}}));
+      }
+    });
+    item.message = "Požadavek má vlastní ID běhu na GitHubu.";
+    note("Sestavení odesláno.", "success");
+  } catch (err) {
+    item.message = errorMessage(err);
+    note(item.message, "error");
+  } finally {
+    working.delete(item.request_id); updateBuilds();
+  }
+  if (item.stage === "dispatched") await refreshBuild(item);
+}
+async function inspectRun(item, client) {
+  const located = await client.findRun(item);
+  if (located.state !== "found") {
+    item.stage = located.state;
+    item.message = located.state === "awaiting" ? "Přesný běh zatím není vidět. Odeslání se automaticky neopakuje." :
+      "GitHub nevrátil právě jeden odpovídající běh.";
+    return;
+  }
+  const run = located.run;
+  item.run_id = run.id;
+  if (run.run_attempt > item.run_attempt) {
+    item.stage = "attempt_changed";
+    item.nextAttempt = run.run_attempt;
+    item.message = "GitHub eviduje nový pokus. Pro ověření jej výslovně vyber.";
+    return;
+  }
+  if (run.run_attempt !== item.run_attempt) throw Error("Nesouhlasí pokus sestavení.");
+  if (run.status !== "completed") {
+    item.stage = run.status || "running"; item.message = "Čeká se na GitHub Actions.";
+    return;
+  }
+  if (run.conclusion !== "success") {
+    item.stage = "failed"; item.message = "GitHub ukončil sestavení se stavem " + run.conclusion + ".";
+    return;
+  }
+  const artifact = selectBuildArtifact(item, run, await client.artifacts(run.id));
+  item.artifact_id = artifact.id;
+  item.artifact_digest = artifact.digest;
+  item.stage = "ready"; item.message = "GitHub má výsledek. Pro export ověř archiv a bajty IPA.";
+  return {run,artifact};
 }
 async function refreshBuild(item) {
-  if (!api) return note("Znovu připoj GitHub token po obnovení stránky.","error");
-  if (!item.source_sha || !sameRepository(item.repo,api.repo)) return;
+  if (!isCurrent(item) || !item.source_sha || working.has(item.request_id)) return;
+  const client = api;
+  working.add(item.request_id);
+  receipts.delete(item.request_id);
+  if (verifiedIPA?.item === item) verifiedIPA = null;
   try {
-    const located=await api.findRun(item);
-    if (located.state!=="found") {
-      item.stage=located.state;item.message=located.state==="awaiting"?
-        "GitHub zatím nezaindexoval odpovídající běh. Nezakládej nový.":
-        "Identita běhu není jednoznačná. Žádný cizí artefakt se nezobrazí.";
-      persist();renderBuilds();return;
-    }
-    const run=located.run;
-    item.run_id=run.id;
-    item.run_attempt=run.run_attempt;
-    if (run.status!=="completed") {
-      item.stage=run.status||"running";
-      item.message="Čeká se na dokončení GitHub Actions.";
-      persist();renderBuilds();return;
-    }
-    const artifacts=await api.artifacts(run.id);
-    const result=reconcileArtifacts(artifacts,item,run);
-    const previewName="pocket-ios-preview-"+item.request_id+"-"+item.source_sha;
-    const previews=artifacts.filter(a=>a.name===previewName && !a.expired && Number.isSafeInteger(a.id) && (!a.workflow_run || a.workflow_run.id===run.id));
-    item.previewArtifact=result.state==="success" && previews.length===1 ? previews[0].id : null;
-    item.stage=result.state;item.artifacts=result.artifacts;
-    item.message=result.state==="success"?
-      "Ověřeny metadata běhu, UUID, SHA a názvy artefaktů. Výstup je NEPODEPSANÝ; instalace vyžaduje podpis.":
-      result.state==="failed"?"Build skončil chybou. Otevři GitHub Actions a projdi logy.":
-      "Nesoulad či chybějící artefakty. Výsledek nelze bezpečně přiřadit.";
-    persist();renderBuilds();
-  } catch(err){item.message=errorMessage(err);persist();renderBuilds();}
+    const result = await inspectRun(item, client);
+    if (result && api === client) receipts.set(item.request_id, result.artifact);
+  } catch (err) { item.stage = "mismatch"; item.message = errorMessage(err); }
+  finally { working.delete(item.request_id); updateBuilds(); }
+}
+async function checkArchive(item, file = null) {
+  if (!isCurrent(item) || working.has(item.request_id)) return;
+  const client = api;
+  working.add(item.request_id);
+  verifiedIPA = null;
+  renderBuilds();
+  try {
+    const current = await inspectRun(item, client);
+    if (!current || api !== client) throw Error("Nepodařilo se potvrdit identitu běhu.");
+    const {run,artifact} = current;
+    receipts.set(item.request_id, artifact);
+    const bytes = file || await client.downloadArtifact(artifact);
+    const result = await verifyBuildResult({expected:item, run, artifact, zipBytes:bytes});
+    if (api !== client) throw Error("Připojení se mezitím změnilo.");
+    verifiedIPA = {item, result};
+    item.message = "ZIP, identita sestavení a SHA-256 IPA souhlasí. Soubor můžeš uložit.";
+    note("Výsledek ověřen.", "success");
+  } catch (err) {
+    item.message = errorMessage(err) + (file ? "" : " ZIP lze stáhnout na GitHubu a ověřit ze Souborů.");
+    note(item.message, "error");
+  } finally { working.delete(item.request_id); updateBuilds(); }
 }
 async function refreshAll() {
-  if (polling||!api) return;
-  polling=true;
+  if (polling || !api) return;
+  polling = true;
   try {
-    for (const item of state.builds.slice(0,8)) {
-      if (item.source_sha && !["success","failed","missing","mismatch","ambiguous"].includes(item.stage))
+    for (const item of state.builds) {
+      if (isCurrent(item) && item.source_sha && ["dispatching","dispatched","awaiting","submission_uncertain",
+        "queued","running","in_progress","waiting","requested","pending"].includes(item.stage)) {
         await refreshBuild(item);
+      } else if (isCurrent(item) && item.stage === "ready" && !receipts.has(item.request_id)) {
+        await refreshBuild(item);
+      }
     }
-  } finally {polling=false;}
+  } finally { polling = false; }
 }
 function exportProject() {
   try{
@@ -280,7 +362,7 @@ async function importProject(file) {
     if (!file || file.size>4_000_000) throw Error("Import podporuje JSON do 4 MB.");
     const result=JSON.parse(await file.text());
     validateProject(result);
-    window.pocketIDE.commitProject(result,Object.keys(result.files)[0]);
+    window.pocketIDE.commitProject(result,Object.keys(result.files)[0],{repo:""});
     note("Projekt importován bez ztráty historie buildů.","success");
   }catch(err){note(errorMessage(err),"error");}
 }
@@ -307,6 +389,14 @@ function init() {
     saveEditing();state.active=e.target.value;persist();renderFiles();
   });
   byId("code").addEventListener("input",saveEditing);
+  byId("forget-target").addEventListener("click", () => {
+    const repo = byId("repo").value.trim();
+    if (!repo || !confirm("Odpojit " + repo + " a zapomenout jeho ověřenou identitu v tomto zařízení?")) return;
+    localStorage.removeItem(bindingKey(repo));
+    disconnect();
+    byId("connect-token").value = "";
+    connectionNote("Cíl odpojen. Při příštím připojení se jeho identita ověří znovu.");
+  });
   byId("check-access").addEventListener("click",()=>void connect());
   byId("connect-token").addEventListener("keydown",event=>{
     if (event.key==="Enter") {event.preventDefault();void connect();}
@@ -345,7 +435,7 @@ function init() {
     void importProject(e.target.files[0]);e.target.value="";
   });
   for (const id of ["repo","app-name","bundle-id"]) byId(id).addEventListener("change",()=>{
-    try{syncSettings();}catch(err){note(errorMessage(err),"error");}
+    try{if (id === "repo") disconnect(); syncSettings();}catch(err){note(errorMessage(err),"error");}
   });
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)void refreshAll();});
   setInterval(()=>{if (!document.hidden)void refreshAll();},12000);
@@ -366,6 +456,8 @@ window.pocketIDE = {
     localStorage.setItem(STORAGE_KEY,JSON.stringify({...state,project,active,settings}));
     state.settings=settings;
     byId("app-name").value=settings.appName;
+    byId("repo").value=settings.repo;
+    if (api && !sameRepository(settings.repo, api.repo)) disconnect();
     state.project=project;
     state.active=active;
     renderFiles();
@@ -392,7 +484,7 @@ window.pocketIDE = {
       validateProject(state.project);
       const paths=Object.keys(state.project.files);
       const tests=paths.filter(path => path.startsWith("Tests/") && path.endsWith(".swift"));
-      note("Struktura projektu je platná. Souborů: " + paths.length + ". Testovacích zdrojů: " + tests.length + ". Kompilace a XCTest proběhnou až při sestavení.", "success");
+      note("Struktura projektu je platná. Souborů: " + paths.length + ". Testovacích zdrojů: " + tests.length + ". Soukromé sestavení vytvoří nepodepsanou IPA.", "success");
     } catch (error) { note(errorMessage(error), "error"); }
   }
 };

@@ -1,4 +1,4 @@
-import {makeRequest, SHA_RE, UUID_RE, sameRepository} from "./core.mjs";
+import {SHA_RE, UUID_RE, sameRepository} from "./core.mjs";
 import {openZipWorkspace} from "./zip-workspace.mjs";
 
 const WORKFLOW = "pocket-language.yml";
@@ -58,23 +58,23 @@ export async function findLanguageRun(api, record) {
   return {url, status:run.conclusion || run.status, artifact:matches[0] ? url + "/artifacts/" + matches[0].id : null};
 }
 
-function mountLanguageTools(container) {
+export function mountLanguageTools(container) {
   const group = element("details"), summary = element("summary", "Swift · definice a doplňování");
   const controls = element("div"), actions = element("div"), status = element("p");
   const links = element("div"), list = element("ul");
   actions.className = "inline-actions"; controls.className = "group-body"; group.className = "group";
   status.setAttribute("role", "status");
   const button = text => {const b = element("button", text); b.type = "button"; actions.append(b); return b;};
-  const definition = button("Definice na Macu…"), completion = button("Návrhy na Macu…");
-  const local = button("Najít text lokálně"), refresh = button("Zjistit stav"), upload = button("Otevřít výsledek");
+  const local = button("Najít text lokálně"), upload = button("Otevřít historický výsledek");
   const input = element("input"); input.type = "file"; input.accept = ".json,.zip"; input.hidden = true;
   const ide = () => globalThis.pocketIDE;
   const code = () => document.getElementById("code");
-  let record, busy = false, modeButtons = [definition, completion];
+  let record, busy = false;
   try { record = JSON.parse(localStorage.getItem(LAST)); } catch {}
   function controlsState() {
-    modeButtons.forEach(b => b.disabled = busy);
-    refresh.disabled = busy || !record; upload.disabled = busy || !record;
+    local.disabled = busy;
+    upload.hidden = !record;
+    upload.disabled = busy || !record;
   }
   function lock(action) {
     return async () => {
@@ -83,10 +83,6 @@ function mountLanguageTools(container) {
       try { await action(); } catch (err) { status.textContent = err.message || String(err); }
       finally { busy = false; controlsState(); }
     };
-  }
-  function link(label, href) {
-    const a = element("a", label); a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
-    links.append(a, document.createTextNode(" "));
   }
   function go(file, line, character) {
     const text = ide().getProject().files[file];
@@ -99,33 +95,6 @@ function mountLanguageTools(container) {
     code().setSelectionRange(target, target);
     const height = parseFloat(getComputedStyle(code()).lineHeight);
     if (height) code().scrollTop = Math.max(0, (line - 2) * height);
-  }
-  async function currentRun() {
-    const run = await findLanguageRun(ide().getAPI(), record);
-    links.replaceChildren();
-    if (!run) { status.textContent = "Běh pro tento dotaz zatím není vidět. Za chvíli obnov stav."; return; }
-    status.textContent = run.artifact ? "Stáhni ZIP a otevři ho zde jako výsledek dotazu." : "GitHub Actions · " + run.status;
-    link("Otevřít běh", run.url); if (run.artifact) link("Stáhnout výsledek ZIP", run.artifact);
-  }
-  async function submit(mode) {
-    const api = ide()?.getAPI?.();
-    if (!api) throw Error("Připoj GitHub v nastavení.");
-    ide().save();
-    const file = ide().getActive(), project = structuredClone(ide().getProject());
-    if (!file.endsWith(".swift") || file.startsWith("Tests/")) throw Error("Vyber Swift soubor z aplikačního targetu.");
-    const position = cursorPosition(code().value, code().selectionStart);
-    if (!confirm("Odeslat aktuální projekt do " + api.repo + " a spustit jeden dotaz SourceKit na macOS? Ve veřejném repozitáři budou zdrojové soubory veřejné.")) return;
-    const request = makeRequest({repo:api.repo}, project);
-    await api.request("GET", "/actions/workflows/" + WORKFLOW);
-    status.textContent = "Ukládám snapshot pro jeden dotaz…";
-    const source_sha = await api.snapshot(request, project);
-    record = {request_id:request.request_id, source_sha, mode, file, position, repo:api.repo,
-      sourceDigest:await digest(project.files[file]), projectDigest:await digest(JSON.stringify(project))};
-    localStorage.setItem(LAST, JSON.stringify(record));
-    links.replaceChildren(); list.replaceChildren();
-    await api.request("POST", "/actions/workflows/" + WORKFLOW + "/dispatches", {ref:"main",
-      inputs:{request_id:record.request_id, source_sha, mode, file, line:String(position.line), column:String(position.character)}});
-    status.textContent = "Dotaz odeslán. Stav a výsledek najdeš tlačítkem Zjistit stav.";
   }
   function entry(text, jump) {
     const li = element("li");
@@ -181,9 +150,6 @@ function mountLanguageTools(container) {
       });
     }
   }
-  definition.addEventListener("click", lock(() => submit("definition")));
-  completion.addEventListener("click", lock(() => submit("completion")));
-  refresh.addEventListener("click", lock(currentRun));
   upload.addEventListener("click", () => input.click());
   input.addEventListener("change", lock(async () => {
     const file = input.files[0]; input.value = ""; if (file) await renderResult(file);
@@ -207,7 +173,7 @@ function mountLanguageTools(container) {
     }
     status.textContent = "Textové výskyty v lokálním projektu · " + (count === 50 ? "prvních 50" : count) + ".";
   }));
-  controls.append(element("p", "Umísti kurzor do Swift souboru. Vzdálený dotaz použije SourceKit-LSP pro aplikační target, lokální hledání pracuje s textem."), actions, input, status, links, list);
+  controls.append(element("p", "Umísti kurzor na název ve Swift souboru a vyhledej jeho výskyty v projektu na zařízení. Vzdálený SourceKit zatím nepodporuje soukromé sestavování."), actions, input, status, links, list);
   group.append(summary, controls); container.append(group); controlsState();
 }
 if (typeof document !== "undefined") {

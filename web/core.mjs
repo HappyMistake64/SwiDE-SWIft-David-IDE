@@ -1,4 +1,6 @@
 // SwiDe browser protocol shared by the UI and Node tests.
+import {PrivateBuildTarget, PRIVATE_SCHEMA, PRIVATE_WORKFLOW, assertSourceIdentity, matchesPrivateRun, pickPrivateRun} from "./build-target.mjs";
+
 export const REPOSITORY = "HappyMistake64/SwiDE-SWIft-David-IDE";
 const LEGACY_REPOSITORY = "HappyMistake64/Xcode-for-iphone";
 
@@ -11,7 +13,7 @@ export function sameRepository(a, b) {
   return typeof a === "string" && typeof b === "string" &&
     canonicalRepository(a).toLowerCase() === canonicalRepository(b).toLowerCase();
 }
-export const WORKFLOW = ".github/workflows/pocket-ios.yml";
+export const WORKFLOW = PRIVATE_WORKFLOW;
 export const STORAGE_KEY = "xcode-pocket-standalone-v1";
 export const SHA_RE = /^[a-f0-9]{40}$/;
 export const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -169,8 +171,8 @@ export function validateProject(p) {
 }
 
 export function validateSettings(s) {
-  const repo = s.repo || REPOSITORY, appName = (s.appName || "PocketApp").trim(), bundleId = s.bundleId || "cz.davidvolf.pocketapp";
-  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[A-Za-z0-9_.-]+$/.test(repo)) throw Error("Repozitář musí být owner/repo.");
+  const repo = s.repo || "", appName = (s.appName || "PocketApp").trim(), bundleId = s.bundleId || "cz.davidvolf.pocketapp";
+  if (repo && !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[A-Za-z0-9_.-]+$/.test(repo)) throw Error("Repozitář musí být owner/repo.");
   if (!/^[A-Za-z][A-Za-z0-9 ._-]{0,59}$/.test(appName)) throw Error("Neplatný název aplikace.");
   if (!/^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*){2,}$/.test(bundleId)) throw Error("Neplatné Bundle ID.");
   return {repo:canonicalRepository(repo),appName,bundleId};
@@ -180,16 +182,12 @@ export function makeRequest(s, project, id = crypto.randomUUID()) {
   validateProject(project);
   const settings = validateSettings(s);
   if (!UUID_RE.test(id)) throw Error("Neplatné UUID.");
-  return {...settings, request_id:id, project_path:"pocket-builds/" + id + ".json",
+  if (!settings.repo || sameRepository(settings.repo,REPOSITORY)) throw Error("Vyber vlastní soukromý repozitář.");
+  return {...settings, schema:PRIVATE_SCHEMA, mode:"generated", run_attempt:1, request_id:id, project_path:"pocket-builds/" + id + ".json",
     source_sha:null, run_id:null, stage:"prepared", created_at:new Date().toISOString()};
 }
 
-export function assertIdentity(r) {
-  if (!r || !UUID_RE.test(r.request_id) || !SHA_RE.test(r.source_sha) ||
-      r.project_path !== "pocket-builds/" + r.request_id + ".json") throw Error("Neúplná identita buildu.");
-  validateSettings(r);
-  return r;
-}
+export const assertIdentity = assertSourceIdentity;
 
 export function utf8Base64(source) {
   const bytes = new TextEncoder().encode(source);
@@ -198,108 +196,46 @@ export function utf8Base64(source) {
   return btoa(binary);
 }
 
-export function matchesRun(run,r) {
-  return !!run && Number.isSafeInteger(run.id) && run.id>0 &&
-    run.display_title==="Pocket iOS " + r.request_id &&
-    run.event==="workflow_dispatch" && String(run.path||"").split("@")[0]===WORKFLOW &&
-    sameRepository(run.repository?.full_name,r.repo) &&
-    (!run.head_repository || sameRepository(run.head_repository.full_name,r.repo));
-}
+export const matchesRun = matchesPrivateRun;
+export const pickRun = pickPrivateRun;
 
-export function pickRun(runs,r,expectedId=null) {
-  const matching=runs.filter(x=>matchesRun(x,r));
-  if (expectedId!==null) return {state: matching.some(x=>x.id===expectedId)?"found":"mismatch",
-    run:matching.find(x=>x.id===expectedId)||null};
-  if (matching.length===0) return {state:"awaiting",run:null};
-  if (matching.length>1) return {state:"ambiguous",run:null};
-  return {state:"found",run:matching[0]};
-}
-
-export function reconcileArtifacts(artifacts,r,run) {
-  assertIdentity(r);
-  if (!matchesRun(run,r)) return {state:"mismatch",artifacts:[]};
-  if (run.status!=="completed") return {state:"running",artifacts:[]};
-  const names={app:"pocket-ios-app-"+r.request_id,logs:"pocket-ios-logs-"+r.request_id,
-    identity:"pocket-ios-identity-"+r.request_id+"-"+r.source_sha};
-  const found={};
-  for (const [kind,name] of Object.entries(names)) {
-    const options=artifacts.filter(a=>a && a.name===name && a.expired!==true &&
-      (!a.workflow_run || a.workflow_run.id===run.id) && Number.isSafeInteger(a.id));
-    if (options.length>1) return {state:"ambiguous",artifacts:[]};
-    found[kind]=options[0]||null;
-  }
-  if (run.conclusion!=="success") return {state:"failed",artifacts:[found.logs,found.identity].filter(Boolean)};
-  if (!found.identity||!found.app) return {state:"missing",artifacts:[]};
-  return {state:"success",artifacts:[found.app,found.logs,found.identity].filter(Boolean)};
-}
-
-export class GithubAPI {
-  constructor(token,repo=REPOSITORY,fetcher=globalThis.fetch.bind(globalThis)) {
-    if (!token || !token.trim()) throw Error("Vlož GitHub token (Contents a Actions).");
-    this.token=token.trim(); this.repo=validateSettings({repo}).repo; this.fetcher=fetcher;
-  }
-  async request(method,path,body) {
-    const response=await this.fetcher("https://api.github.com/repos/"+this.repo+path,{
-      method,cache:"no-store",
-      headers:{"Authorization":"Bearer "+this.token,"Accept":"application/vnd.github+json",
-        "X-GitHub-Api-Version":"2022-11-28",...(body===undefined?{}:{"Content-Type":"application/json"})},
-      ...(body===undefined?{}:{body:JSON.stringify(body)})
-    });
-    if (!response.ok) throw Error("GitHub HTTP "+response.status+": "+(await response.text().catch(()=>"")).slice(0,230));
-    return response.status===204?null:response.json();
-  }
-  async check(){return this.request("GET","");}
-  async verifyAccess(){
-    const repository=await this.check();
-    if (!sameRepository(repository?.full_name,this.repo))
-      throw Error("GitHub vrátil jiný repozitář.");
-    if (repository?.permissions?.push===false)
-      throw Error("Token má k repozitáři jen přístup pro čtení. Povol Contents: Read/Write.");
-    return repository;
-  }
-  async snapshot(r,p){
-    if (!sameRepository(r.repo,this.repo)) throw Error("Repozitář nesouhlasí.");
-    const result=await this.request("PUT","/contents/"+r.project_path,{
-      message:"build: "+r.request_id,content:utf8Base64(JSON.stringify(validateProject(p))),branch:"main"});
-    if (!SHA_RE.test(result?.commit?.sha)) throw Error("GitHub nevrátil commit SHA.");
-    return result.commit.sha;
-  }
-  async dispatch(r) {
-    assertIdentity(r);
-    if (!sameRepository(r.repo,this.repo)) throw Error("Repozitář nesouhlasí.");
-    return this.request("POST","/actions/workflows/pocket-ios.yml/dispatches",{
-      ref:"main",inputs:{source_sha:r.source_sha,request_id:r.request_id,
-        project_path:r.project_path,app_name:r.appName,bundle_id:r.bundleId,
-        ...(r.capturePreview ? {capture_preview:"true", ...(r.appearance && r.appearance!=="default" ? {appearance:r.appearance} : {}), ...(r.debugAt ? {debug_at:r.debugAt} : {})} : {})}});
-  }
-  async getRun(id){return this.request("GET","/actions/runs/"+Number(id));}
-  async findRun(r) {
-    if (r.run_id) return pickRun([await this.getRun(r.run_id)],r,r.run_id);
-    const matches=[];
-    for (let page=1; page<=5;page++) {
-      const result=await this.request("GET","/actions/workflows/pocket-ios.yml/runs?event=workflow_dispatch&per_page=100&page="+page);
-      const runs=result.workflow_runs||[];
-      matches.push(...runs.filter(x=>matchesRun(x,r)));
-      if (matches.length>1 || runs.length<100) break;
-    }
-    return pickRun(matches,r);
-  }
-  async artifacts(id){
-    const result=[];
-    for (let page=1;page<=5;page++){
-      const answer=await this.request("GET","/actions/runs/"+Number(id)+"/artifacts?per_page=100&page="+page);
-      const values=answer.artifacts||[]; result.push(...values);
-      if (values.length<100) break;
-    }
-    return result;
+export class GithubAPI extends PrivateBuildTarget {
+  constructor(token,repo,fetcher=globalThis.fetch.bind(globalThis)) {
+    super(token, repo, fetcher, validateProject);
   }
 }
 
-export function restoreState(raw){
-  try {
-    const p=JSON.parse(raw);
-    return {project:validateProject(p.project),settings:validateSettings(p.settings||{}),
-      builds:Array.isArray(p.builds)?p.builds.filter(x=>x&&UUID_RE.test(x.request_id)).slice(0,30):[],
-      active:typeof p.active==="string"?p.active:"PocketApp.swift"};
-  } catch{return {project:newProject(),settings:validateSettings({}),builds:[],active:"PocketApp.swift"};}
+// Retain old project data and historical records while dropping all credential fields.
+function restoreBuild(value) {
+  if (!value || !UUID_RE.test(value.request_id)) return null;
+  const fields = ["request_id","repo","source_sha","project_path","created_at","stage","appName","bundleId",
+    "schema","mode","run_id","run_attempt","repository_id","owner_id","actor_id","workflow_id",
+    "workflow_path","caller_branch","caller_sha","builder_sha","input_sha256","manifest_sha256","artifact_id","artifact_digest","nextAttempt"];
+  const build = {};
+  for (const field of fields) {
+    const entry = value[field];
+    if (typeof entry === "string" || Number.isSafeInteger(entry) || entry === null) build[field] = entry;
+  }
+  if (build.schema !== PRIVATE_SCHEMA || sameRepository(build.repo, REPOSITORY)) {
+    build.stage = "historical";
+  }
+  return build;
+}
+
+export function restoreState(raw) {
+  let saved;
+  try { saved = JSON.parse(raw) || {}; } catch { saved = {}; }
+  let settings, project;
+  try { settings = validateSettings(saved.settings || {}); } catch { settings = validateSettings({}); }
+  if (sameRepository(settings.repo, REPOSITORY)) settings.repo = "";
+  try { project = validateProject(saved.project); } catch { project = newProject(); }
+  const history = Array.isArray(saved.builds) ? saved.builds.map(restoreBuild).filter(Boolean) : [];
+  let ended = 0;
+  const builds = history.filter(build => {
+    if (!["ready","historical","failed"].includes(build.stage)) return true;
+    ended += 1;
+    return ended <= 30;
+  });
+  return {project, settings, builds,
+    active:typeof saved.active === "string" ? saved.active : "PocketApp.swift"};
 }

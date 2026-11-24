@@ -27,8 +27,8 @@ function safePath(path) {
   return path.length <= 1024 && !/[\\:\x00-\x1f\x7f]/.test(path) &&
     parts.every(p => p && p !== "." && p !== "..");
 }
-function parseDirectory(bytes) {
-  check(bytes.length <= zipLimits.input && bytes.length >= 22, "ZIP musí mít nejvýše 20 MiB a platnou hlavičku.");
+function parseDirectory(bytes, limits = zipLimits) {
+  check(bytes.length <= limits.input && bytes.length >= 22, "ZIP přesahuje povolenou velikost nebo nemá platnou hlavičku.");
   const data = view(bytes);
   const u16 = p => data.getUint16(p, true);
   const u32 = p => data.getUint32(p, true);
@@ -37,7 +37,7 @@ function parseDirectory(bytes) {
   while (end >= last && (u32(end) !== 0x06054b50 || end+22+u16(end+20) !== bytes.length)) end--;
   check(end >= last, "Konec archivu ZIP se nepodařilo najít.");
   const count = u16(end+10), directoryStart = u32(end+16);
-  check(!u16(end+4) && !u16(end+6) && u16(end+8) === count && count <= zipLimits.entries &&
+  check(!u16(end+4) && !u16(end+6) && u16(end+8) === count && count <= limits.entries &&
     directoryStart + u32(end+12) === end, "Vícesvazkové archivy, ZIP64 nebo příliš mnoho položek nejsou podporovány.");
   const entries = [], files = new Set(), explicit = new Set();
   let cursor = directoryStart, total = 0;
@@ -72,8 +72,8 @@ function parseDirectory(bytes) {
     check(!type || type === (dir ? 0x4000 : 0x8000), "ZIP se symbolickými odkazy nebo zvláštními soubory není podporován.");
     check(!dir || size === 0, "Složka ZIP obsahuje neočekávaná data.");
     total += size;
-    check(size <= zipLimits.entry && total <= zipLimits.expanded && (method !== 0 || compressedSize === size), "Překročen limit 10 MiB na soubor nebo 50 MiB pro rozbalený ZIP, případně neplatná velikost.");
-    entries.push({path, dir, mode, crc, method, size, time:u16(cursor+12), date:u16(cursor+14),
+    check(size <= limits.entry && total <= limits.expanded && (method !== 0 || compressedSize === size), "Překročen limit rozbaleného archivu ZIP nebo neplatná velikost.");
+    entries.push({path, rawPath, dir, mode, crc, method, size, time:u16(cursor+12), date:u16(cursor+14),
       packed:bytes.subarray(offset, offset+compressedSize), local, end:offset+compressedSize});
     cursor = next;
   }
@@ -119,6 +119,24 @@ async function unpack(entry) {
   } finally {
     reader.releaseLock();
   }
+}
+
+// Results accept only exact root filenames. Validate all headers and limits
+// before inflating any data, and never write paths supplied by an archive.
+export async function readExactZipFiles(bytes, maxInput, fileLimits) {
+  const sizes = Object.values(fileLimits);
+  const entries = parseDirectory(bytes, {input:maxInput, entries:sizes.length,
+    entry:Math.max(...sizes), expanded:sizes.reduce((a,b)=>a+b, 0)});
+  check(entries.length === sizes.length && entries.every(e => !e.dir &&
+    Object.hasOwn(fileLimits,e.rawPath) && e.size > 0 && e.size <= fileLimits[e.rawPath]),
+    "Výsledný ZIP obsahuje neočekávané soubory nebo velikosti.");
+  const files = new Map();
+  for (const entry of entries) {
+    const data = await unpack(entry);
+    check(crc32(data) === entry.crc, "Nesouhlasí kontrolní součet výsledku.");
+    files.set(entry.rawPath,data);
+  }
+  return files;
 }
 
 export async function openZipWorkspace(bytes) {
@@ -303,7 +321,7 @@ export function mountZipWorkspace(container) {
   container.append(openActions,input,directory,filename,label,editor,catalogPanel,projectActions,status,archiveOptions);
   let entries = [], archiveName = "", originalFile, db, workspaceId, closedName = "", editSequence = 0, busy = false;
   const dirty = new Map();
-  const updateOriginalRun = mountOriginalRun(container,()=>({entries,pack:()=>exportZipWorkspace(entries)}));
+  const updateOriginalRun = mountOriginalRun(container);
   function updateButtons(locked) {
     busy = locked;
     choose.disabled = folder.disabled = editor.disabled = catalogPanel.disabled = busy;

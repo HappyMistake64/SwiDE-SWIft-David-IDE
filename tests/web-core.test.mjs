@@ -1,25 +1,26 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {REPOSITORY,WORKFLOW,newProject,validateProject,validPath,makeRequest,
-  validateSettings,assertIdentity,utf8Base64,matchesRun,pickRun,reconcileArtifacts,
+  validateSettings,assertIdentity,utf8Base64,matchesRun,pickRun,
   restoreState,GithubAPI} from "../web/core.mjs";
 
+import {fixture} from "./private-github-fixture.mjs";
 const UUID_A="a7612db1-a3fc-4e61-963c-cc11fedf4d20";
 const UUID_B="b8612db1-a3fc-4e61-963c-cc11fedf4d20";
-const UUID_C="c9612db1-a3fc-4e61-963c-cc11fedf4d20";
-const SHA_A="a".repeat(40),SHA_B="b".repeat(40),SHA_C="c".repeat(40);
-function identity(uuid=UUID_A,sha=SHA_A) {
-  return {...makeRequest({repo:REPOSITORY},newProject(),uuid),source_sha:sha};
+function setup() {
+  const f = fixture();
+  return {...f, api:new GithubAPI("test-secret",f.repo,f.fetcher)};
 }
-function run(r,id=21,changes={}) {
-  return {id,event:"workflow_dispatch",display_title:"Pocket iOS "+r.request_id,
-    path:WORKFLOW+"@refs/heads/main",repository:{full_name:REPOSITORY},
-    head_repository:{full_name:REPOSITORY},status:"completed",conclusion:"success",...changes};
+async function prepare(f, project=newProject(), id=UUID_A) {
+  const r=makeRequest({repo:f.repo},project,id);
+  await f.api.prepare(r, project);
+  return r;
 }
-function artifact(r,kind,id=1,changes={}) {
-  const name=kind==="identity"?"pocket-ios-identity-"+r.request_id+"-"+r.source_sha:
-    "pocket-ios-"+kind+"-"+r.request_id;
-  return {name,id,expired:false,workflow_run:{id:21},...changes};
+function run(r,id=71) {
+  const repo={full_name:r.repo,id:r.repository_id,private:true,owner:{id:r.owner_id}};
+  return {id,event:"workflow_dispatch",display_title:"SwiDe "+r.request_id+" "+r.source_sha+" "+r.manifest_sha256,
+    path:WORKFLOW,workflow_id:r.workflow_id,head_sha:r.caller_sha,head_branch:r.caller_branch,actor:{id:r.actor_id},
+    repository:repo,head_repository:repo,status:"completed",conclusion:"success",run_attempt:1};
 }
 test("default SwiftUI project is valid",()=>{
   const project=validateProject(newProject());
@@ -43,122 +44,124 @@ test("supports Unicode text in Github API base64",()=>{
   const decoded=new TextDecoder().decode(Uint8Array.from(atob(utf8Base64("Příliš")),(c)=>c.charCodeAt(0)));
   assert.equal(decoded,"Příliš");
 });
-test("creates canonical immutable request",()=>{
-  const r=identity();assert.equal(r.project_path,"pocket-builds/"+UUID_A+".json");
+test("requests, snapshots and dispatch share the immutable source, workflow and run identity",async()=>{
+  const f=setup(), p=newProject(), r=await prepare(f,p);
+  assert.equal(r.project_path,"pocket-builds/"+UUID_A+".json");
+  r.source_sha=await f.api.snapshot(r,p);
   assert.equal(assertIdentity(r),r);
-  assert.throws(()=>assertIdentity({...r,source_sha:"nope"}));
+  assert.equal(f.state.refs.get("refs/heads/main"),r.caller_sha);
+  assert.equal(f.state.refs.get("refs/heads/requests/"+UUID_A),r.source_sha);
+  const tree=f.calls.find(c=>c.path==="/git/trees" && c.method==="POST").body;
+  assert.deepEqual(tree.tree.map(e=>e.path),[r.project_path,"requests/"+UUID_A+".json"]);
+  assert.deepEqual(JSON.parse(tree.tree[0].content),p);
+  assert.deepEqual(f.state.commits.get(r.source_sha).parents,[]);
+  r.stage="dispatching";
+  await f.api.dispatch(r);
+  assert.equal(r.run_id,71);
+  const submit=f.calls.find(c=>c.path.endsWith("/dispatches"));
+  assert.deepEqual(submit.body,{ref:"main",inputs:{request_id:UUID_A,source_sha:r.source_sha,manifest_sha256:r.manifest_sha256}});
+  assert.equal(submit.options.headers["X-GitHub-Api-Version"],"2026-03-10");
+  assert.ok(f.calls.every(c=>c.options.redirect==="error" && c.options.credentials==="omit"));
+  assert.ok(!JSON.stringify(r).includes("test-secret"));
+  await assert.rejects(f.api.dispatch(r));
 });
-test("settings reject invalid bundle and repository",()=>{
-  assert.throws(()=>validateSettings({bundleId:"bad"}));
-  assert.throws(()=>validateSettings({repo:"./evil"}));
+test("recovery validates existing bytes and options and never overwrites a request ref",async()=>{
+  const f=setup(), p=newProject(), r=await prepare(f,p);
+  const sha=await f.api.snapshot(r,p);
+  const refWrites=()=>f.calls.filter(c=>c.path==="/git/refs").length;
+  assert.equal(refWrites(),1);
+  assert.equal(await f.api.snapshot(r,p),sha);
+  assert.equal(refWrites(),1);
+  const changed={...p,files:{...p.files,"Other.swift":"let x=2"}};
+  await assert.rejects(f.api.snapshot(r,changed));
+  const colliding=await prepare(f,changed);
+  await assert.rejects(f.api.snapshot(colliding,changed));
+  const changedOptions=makeRequest({repo:f.repo,appName:"Other"},p,UUID_A);
+  await f.api.prepare(changedOptions,p);
+  await assert.rejects(f.api.snapshot(changedOptions,p));
+  assert.equal(refWrites(),1);
+  assert.equal(f.calls.filter(c=>c.path.endsWith("/dispatches")).length,0);
 });
-test("matches only correct workflow, title, event and repo",()=>{
-  const r=identity();
-  assert.equal(matchesRun(run(r),r),true);
-  for (const change of [
-    {path:".github/workflows/elsewhere.yml"},
-    {event:"push"},
-    {repository:{full_name:"other/repo"}},
-    {display_title:"Pocket iOS "+UUID_B}
-  ]) assert.equal(matchesRun(run(r,21,change),r),false);
+test("every ambiguous or different run stays unresolved after a lost dispatch response",async()=>{
+  const f=setup(), p=newProject(), r=await prepare(f,p);
+  r.source_sha=await f.api.snapshot(r,p);
+  const other=await prepare(f,p,UUID_B);
+  other.source_sha=await f.api.snapshot(other,p);
+  const a=run(r), b=run(other,72);
+  for (const changes of [{head_sha:"e".repeat(40)}, {workflow_id:100}, {actor:{id:88}},
+    {display_title:a.display_title.replace(r.manifest_sha256,"4".repeat(64))},
+    {event:"push"}, {repository:{...a.repository,private:false}}, {head_repository:{...a.repository,id:44}},
+    {path:".github/workflows/other.yml"}, {head_branch:"other"}]) assert.equal(matchesRun({...a,...changes},r),false);
+  f.state.runs=[a,b];
+  assert.equal((await f.api.findRun(r)).run.id,71);
+  assert.equal((await f.api.findRun(other)).run.id,72);
+  f.state.runs.push({...a,id:73});
+  assert.equal((await f.api.findRun(r)).state,"ambiguous");
+  assert.equal((await f.api.findRun({...r,run_id:71})).run.id,71);
+  assert.equal(pickRun([b],r,72).state,"mismatch");
+  assert.equal(f.calls.filter(c=>c.path.endsWith("/dispatches")).length,0);
 });
-test("three parallel builds cannot get swapped",()=>{
-  const ids=[identity(UUID_A,SHA_A),identity(UUID_B,SHA_B),identity(UUID_C,SHA_C)];
-  const runs=ids.map((r,i)=>run(r,21+i));
-  ids.forEach((r,i)=>{
-    const response=pickRun(runs,r);
-    assert.equal(response.state,"found");
-    assert.equal(response.run.id,21+i);
-  });
+test("private preflight rejects public targets, swapped owners/IDs, altered templates and writes via the read API",async()=>{
+  for (const mutate of [
+    f=>{f.metadata.visibility="public"; f.metadata.private=false;}, f=>{f.metadata.visibility="internal";},
+    f=>{f.metadata.id=1454608498;}, f=>{f.metadata.id=999;}, f=>{f.metadata.owner.type="Organization";},
+    f=>{f.metadata.owner.id=999;}, f=>{f.metadata.full_name="another/name";}, f=>{f.metadata.permissions.push=false;},
+    f=>{f.state.workflow.state="disabled_manually";}, f=>{f.state.workflow.path=".github/workflows/else.yml";},
+    f=>{f.state.trees.get("b".repeat(40)).tree.push({path:"other",type:"blob",mode:"100644"});},
+    f=>{f.state.trees.get("b".repeat(40)).tree.at(-1).sha="9".repeat(40);},
+    f=>{f.state.trees.get("b".repeat(40)).truncated=true;}
+  ]) {
+    const f=setup(), p=newProject(), r=await prepare(f,p);
+    mutate(f);
+    await assert.rejects(f.api.snapshot(r,p));
+    assert.ok(f.calls.every(c=>c.method==="GET"));
+  }
+  for (const repo of ["",REPOSITORY,"HappyMistake64/Xcode-for-iphone","alice/.."]) {
+    assert.throws(()=>new GithubAPI("t",repo));
+  }
+  const f=setup();
+  assert.throws(()=>f.api.request("PUT","/contents/new.json",{content:"hello"}));
+  assert.equal(f.calls.length,0);
 });
-test("multiple runs sharing request ID are ambiguous",()=>{
-  const r=identity();assert.equal(pickRun([run(r,21),run(r,22)],r).state,"ambiguous");
-  assert.equal(pickRun([run(r,21),run(r,22)],r,22).run.id,22);
-  assert.equal(pickRun([run(r,21)],r,999).state,"mismatch");
+test("persisted binding detects target replacement after reconnection",async()=>{
+  const f=setup();
+  await f.api.verifyAccess();
+  const saved=JSON.parse(JSON.stringify(f.api.binding));
+  f.metadata.id++;
+  await assert.rejects(new GithubAPI("s",f.repo,f.fetcher).verifyAccess(saved));
+  assert.ok(f.calls.every(c=>c.method==="GET"));
 });
-test("artifact binding needs exact SHA-qualified identity in same run",()=>{
-  const r=identity(),build=run(r),base=[artifact(r,"app"),artifact(r,"logs",2)];
-  assert.equal(reconcileArtifacts(base,r,build).state,"missing");
-  assert.equal(reconcileArtifacts([...base,artifact(r,"identity",3)],r,build).state,"success");
+test("forbidden test, preview, hidden and script inputs do not reach GitHub",async()=>{
+  for (const path of ["Tests/Thing.swift","tools/run.sh","money$1.swift",".folder/main.swift"]) {
+    const f=setup(), p=newProject();
+    p.files[path]="let synthetic=0";
+    await assert.rejects(prepare(f,p));
+    assert.equal(f.calls.length,0);
+  }
+  const f=setup(), p=newProject(), r=makeRequest({repo:f.repo},p,UUID_A);
+  r.capturePreview=true;
+  await assert.rejects(f.api.prepare(r,p));
+  assert.equal(f.calls.length,0);
 });
-test("wrong SHA and expired artifacts fail closed",()=>{
-  const r=identity(),build=run(r);
-  assert.equal(reconcileArtifacts([artifact(r,"app"),artifact(r,"identity",3,{name:"pocket-ios-identity-"+UUID_A+"-"+SHA_B})],r,build).state,"missing");
-  assert.equal(reconcileArtifacts([artifact(r,"app"),artifact(r,"identity",3,{expired:true})],r,build).state,"missing");
+test("HTTP errors and revoked tokens never dispatch elsewhere or expose server content",async()=>{
+  const f=setup(), p=newProject(), r=await prepare(f,p);
+  r.source_sha=await f.api.snapshot(r,p); r.stage="dispatching"; f.state.dispatchStatus=403;
+  await assert.rejects(f.api.dispatch(r),/GitHub HTTP 403/);
+  assert.equal(r.run_id,null);
+  const denied=new GithubAPI("test-secret",f.repo,async()=>new Response("test-secret",{status:401}));
+  await assert.rejects(denied.verifyAccess(),e=>e.message==="GitHub HTTP 401");
 });
-test("duplicate artifacts and mismatched run fail closed",()=>{
-  const r=identity();
-  assert.equal(reconcileArtifacts([artifact(r,"app",1),artifact(r,"app",8),artifact(r,"identity",3)],r,run(r)).state,"ambiguous");
-  assert.equal(reconcileArtifacts([],r,run(r,21,{event:"push"})).state,"mismatch");
-});
-test("running and failed builds never expose unsigned app",()=>{
-  const r=identity();
-  assert.equal(reconcileArtifacts([artifact(r,"app")],r,run(r,21,{status:"in_progress"})).state,"running");
-  assert.equal(reconcileArtifacts([artifact(r,"app"),artifact(r,"logs",2)],r,run(r,21,{conclusion:"failure"})).state,"failed");
-});
-test("restores local snapshot and build state without credentials",()=>{
-  const state={project:newProject(),settings:validateSettings({}),builds:[identity()],active:"PocketApp.swift"};
+test("old public requests stay historical and local projects survive a settings error",()=>{
+  const old="HappyMistake64/Xcode-for-iphone", project=newProject();
+  const state={project,settings:{repo:old},builds:[{repo:old,request_id:UUID_A,stage:"committed",token:"never"}]};
   const restored=restoreState(JSON.stringify(state));
-  assert.equal(restored.builds[0].request_id,UUID_A);
-  assert.equal(restored.project.files["PocketApp.swift"],state.project.files["PocketApp.swift"]);
+  assert.equal(restored.settings.repo,"");
+  assert.equal(restored.builds[0].stage,"historical");
+  assert.equal(restored.builds[0].token,undefined);
+  assert.deepEqual(restoreState(JSON.stringify({...state,settings:{repo:"bad"}})).project,project);
   assert.deepEqual(restoreState("bad").builds,[]);
-});
-test("API sends correct snapshot and dispatch with exact SHA",async()=>{
-  const sent=[];
-  const mocked=async (url,opts)=>{
-    sent.push({url,opts});
-    if(url.includes("/contents/"))return {ok:true,status:201,json:async()=>({commit:{sha:SHA_A}})};
-    if(url.endsWith("/dispatches"))return {ok:true,status:204};
-    return {ok:true,status:200,json:async()=>({full_name:REPOSITORY})};
-  };
-  const client=new GithubAPI("test-token",REPOSITORY,mocked);
-  const req=identity();
-  assert.equal(await client.snapshot(req,newProject()),SHA_A);
-  await client.dispatch(req);
-  assert.equal(sent.length,2);
-  const snapshot=JSON.parse(sent[0].opts.body);
-  assert.equal(snapshot.branch,"main");
-  assert.ok(snapshot.content.length>100);
-  const dispatch=JSON.parse(sent[1].opts.body);
-  assert.equal(dispatch.inputs.source_sha,SHA_A);
-  assert.equal(dispatch.inputs.request_id,UUID_A);
-  assert.ok(!JSON.stringify(sent).includes("localStorage"));
-});
-test("API uses exact saved run ID and finds unambiguous run",async()=>{
-  const r=identity();
-  const mock=async (url)=>{
-    if (url.includes("/runs/88"))return {ok:true,status:200,json:async()=>run(r,88)};
-    if (url.includes("/runs?"))return {ok:true,status:200,json:async()=>({workflow_runs:[run(r,88)]})};
-    throw Error("Unexpected "+url);
-  };
-  const api=new GithubAPI("mock",REPOSITORY,mock);
-  assert.equal((await api.findRun(r)).run.id,88);
-  assert.equal((await api.findRun({...r,run_id:88})).run.id,88);
-});
-
-test("token verification accepts writable GitHub repository",async()=>{
-  const api=new GithubAPI("test-token",REPOSITORY,async()=>{
-    return {ok:true,status:200,json:async()=>({full_name:REPOSITORY,permissions:{push:true}})};
-  });
-  assert.equal((await api.verifyAccess()).full_name,REPOSITORY);
-});
-test("token verification rejects read-only repository access",async()=>{
-  const api=new GithubAPI("read-only",REPOSITORY,async()=>({
-    ok:true,status:200,json:async()=>({full_name:REPOSITORY,permissions:{push:false}})
-  }));
-  await assert.rejects(api.verifyAccess(),/jen přístup pro čtení/);
-});
-test("token verification reports rejected credentials",async()=>{
-  const api=new GithubAPI("bad-token",REPOSITORY,async()=>({
-    ok:false,status:401,text:async()=>"Bad credentials"
-  }));
-  await assert.rejects(api.verifyAccess(),/GitHub HTTP 401/);
-});
-test("token verification rejects repository identity mismatch",async()=>{
-  const api=new GithubAPI("test-token",REPOSITORY,async()=>({
-    ok:true,status:200,json:async()=>({full_name:"other/repo",permissions:{push:true}})
-  }));
-  await assert.rejects(api.verifyAccess(),/jiný repozitář/);
+  assert.throws(()=>validateSettings({bundleId:"bad"}));
+  assert.throws(()=>makeRequest({},project));
 });
 test("mobile login feedback is next to the token field",async()=>{
   const {readFile}=await import("node:fs/promises");
@@ -171,19 +174,14 @@ test("mobile login feedback is next to the token field",async()=>{
   assert.match(app,/byId\("connect-token"\)\.addEventListener\("keydown"/);
 });
 
-test("HTTP errors do not pretend the dispatch succeeded",async()=>{
-  const api=new GithubAPI("mock",REPOSITORY,async()=>({ok:false,status:403,text:async()=>"Missing Actions permission"}));
-  await assert.rejects(api.dispatch(identity()),/403/);
-});
-
 test("default fetch retains the browser global as its receiver", async t => {
-  const fetchMock = t.mock.method(globalThis, "fetch", async function () {
-    assert.equal(this, globalThis);
-    return {ok:true, status:200, json:async () => ({full_name:REPOSITORY})};
+  const f=fixture();
+  const fetchMock=t.mock.method(globalThis,"fetch",async function(url,options){
+    assert.equal(this,globalThis);
+    return f.fetcher(url,options);
   });
-  const repository = await new GithubAPI("test-token").check();
-  assert.equal(repository.full_name, REPOSITORY);
-  assert.equal(fetchMock.mock.callCount(), 1);
+  assert.equal((await new GithubAPI("test",f.repo).check()).full_name,f.repo);
+  assert.equal(fetchMock.mock.callCount(),1);
 });
 
 function resourceProject() {
@@ -205,12 +203,10 @@ test("v3 resources, directories and edited Swift survive local restore and build
   const {project: restored} = restoreState(JSON.stringify({project}));
   assert.deepEqual(restored, project);
   restored.files["ContentView.swift"] += "\n// updated";
-  const api = new GithubAPI("test", REPOSITORY, async (_, opts) => {
-    const bytes = Buffer.from(JSON.parse(opts.body).content, "base64");
-    assert.deepEqual(JSON.parse(bytes.toString()), restored);
-    return {ok:true,status:201,json:async()=>({commit:{sha:SHA_A}})};
-  });
-  assert.equal(await api.snapshot(identity(),restored), SHA_A);
+  const f=setup(), r=await prepare(f,restored);
+  r.source_sha=await f.api.snapshot(r,restored);
+  const tree=f.calls.find(c=>c.path==="/git/trees" && c.method==="POST").body.tree;
+  assert.deepEqual(JSON.parse(tree[0].content),restored);
 });
 
 test("rejects malformed assets and conflicting paths before dispatch", () => {
@@ -254,16 +250,34 @@ test("plain v1/v2 text and v3 non-catalog images remain supported", () => {
   assert.equal(validateProject(project),project);
 });
 
+test("restoring many completed builds keeps every pending request and the selected attempt metadata",()=>{
+  const historic=Array.from({length:35},()=>({request_id:UUID_B,stage:"historical"}));
+  const pending={request_id:UUID_A,repo:"alice/private-app",schema:"swide-build-request/v2",stage:"attempt_changed",
+    nextAttempt:2,run_attempt:1,artifact_id:42,artifact_digest:"sha256:"+"a".repeat(64)};
+  const {builds}=restoreState(JSON.stringify({project:newProject(),builds:[...historic,pending]}));
+  assert.equal(builds.length,31);
+  assert.deepEqual(builds.at(-1),pending);
+});
 
-test("the renamed repository reconnects and recognizes previous builds", async () => {
-  const old = "HappyMistake64/Xcode-for-iphone";
-  const saved = restoreState(JSON.stringify({project:newProject(),settings:{repo:old},builds:[{...identity(),repo:old}]}));
-  assert.equal(saved.settings.repo, REPOSITORY);
-  assert.equal(matchesRun(run(saved.builds[0]), saved.builds[0]), true);
-  assert.equal(matchesRun(run(saved.builds[0],21,{repository:{full_name:"Other/SwiDE-SWIft-David-IDE"}}), saved.builds[0]), false);
-  const api = new GithubAPI("token", old, async url => {
-    assert.equal(url, "https://api.github.com/repos/" + REPOSITORY);
-    return new Response(JSON.stringify({full_name:REPOSITORY,permissions:{push:true}}));
-  });
-  await api.verifyAccess();
+test("release pin matches the complete clean template and its reusable builder",async()=>{
+  const {readFile,readdir}=await import("node:fs/promises");
+  const {createHash}=await import("node:crypto");
+  const {BUILDER_SHA,TEMPLATE_BLOBS}=await import("../web/build-pins.mjs");
+  const root=new URL("../build-template/",import.meta.url);
+  const files={};
+  async function walk(dir,prefix) {
+    for (const item of await readdir(dir,{withFileTypes:true})) {
+      const path=prefix+item.name;
+      if (item.isDirectory()) await walk(new URL(item.name+"/",dir),path+"/");
+      else {
+        assert.equal(item.isFile(),true);
+        const bytes=await readFile(new URL(item.name,dir));
+        files[path]=createHash("sha1").update("blob "+bytes.length+"\0").update(bytes).digest("hex");
+      }
+    }
+  }
+  await walk(root,"");
+  assert.deepEqual(files,TEMPLATE_BLOBS);
+  const wrapper=await readFile(new URL(WORKFLOW,root),"utf8");
+  assert.match(wrapper,new RegExp("swide-private-build\\.yml@"+BUILDER_SHA+"(?:\\s|$)"));
 });

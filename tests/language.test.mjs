@@ -24,3 +24,32 @@ test("downloads bind to exact run and SHA even if another commit becomes main",a
     artifacts:async()=>[{...artifact,id:88,workflow_run:{id:13}},artifact]};
   assert.match((await findLanguageRun(api,record)).artifact,/\/runs\/45\/artifacts\/52$/);
 });
+
+test("SourceKit offers only local search and historical imports, and opens without network access", async()=>{
+  const {mountLanguageTools} = await import("../web/language.mjs");
+  const nodes = [];
+  const createElement = tag => {
+    const node = {tag, children:[], listeners:{}, setAttribute(){}, replaceChildren(){},
+      append(...children) { this.children.push(...children); },
+      addEventListener(event, handler) { this.listeners[event] = handler; }};
+    nodes.push(node); return node;
+  };
+  const editor = {selectionStart:0,selectionEnd:3,value:"Foo"};
+  const previous = ["document","localStorage","pocketIDE"].map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]);
+  try {
+    globalThis.document = {createElement,getElementById:()=>editor};
+    Object.defineProperty(globalThis,"localStorage",{configurable:true,value:{getItem:()=>null}});
+    globalThis.pocketIDE = {save(){}, getProject(){return {files:{"One.swift":"Foo()"}};},
+      getAPI(){assert.fail("Local SourceKit search tried to open a remote connection");}};
+    mountLanguageTools(createElement("div"));
+    const buttons = nodes.filter(node=>node.tag==="button");
+    assert.deepEqual(buttons.filter(node=>!node.hidden).map(node=>node.textContent),["Najít text lokálně"]);
+    await buttons[0].listeners.click();
+    assert(nodes.some(node=>node.textContent==="One.swift:1:1"));
+  } finally {
+    for (const [name,original] of previous) {
+      if (original) Object.defineProperty(globalThis,name,original);
+      else delete globalThis[name];
+    }
+  }
+});

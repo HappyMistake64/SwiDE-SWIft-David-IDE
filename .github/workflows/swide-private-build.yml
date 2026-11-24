@@ -1,0 +1,92 @@
+name: SwiDe private generated iOS build
+on:
+  workflow_call:
+    inputs:
+      request_id:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+      manifest_sha256:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Verify private workflow caller
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PRIVATE: ${{ github.event.repository.private }}
+          CALLER: ${{ github.repository }}
+          CALLER_REF: ${{ github.workflow_ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          OWNER_ID: ${{ github.repository_owner_id }}
+          ACTOR_ID: ${{ github.actor_id }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          test "$EVENT_NAME" = workflow_dispatch
+          test "$PRIVATE" = true
+          test "$OWNER_ID" = "$ACTOR_ID"
+          test "$ACTOR" = "$TRIGGERING_ACTOR"
+          test "$CALLER_REF" = "$CALLER/.github/workflows/swide-build.yml@refs/heads/$DEFAULT_BRANCH"
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+
+      - name: Get trusted tools at the running reusable workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: HappyMistake64/SwiDE-SWIft-David-IDE
+          ref: ${{ job.workflow_sha }}
+          path: builder
+          sparse-checkout: native-build
+          persist-credentials: false
+
+      - name: Read and validate the immutable data snapshot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          BUILDER_SHA: ${{ job.workflow_sha }}
+          CALLER_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git -C builder rev-parse HEAD)" = "$BUILDER_SHA"
+          test "$CALLER_SHA" = "$GITHUB_SHA"
+          python3 -I builder/native-build/private_build.py prepare
+
+      - name: Compile generated project for iPhone
+        run: |
+          set -euo pipefail
+          xcodebuild -project generated/PocketApp.xcodeproj -scheme PocketApp \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -disableAutomaticPackageResolution -derivedDataPath built \
+            CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/swide-xcodebuild.log" 2>&1 || {
+              echo 'Compilation failed. Source and compiler output are kept out of the job log.'
+              exit 1
+            }
+
+      - name: Package unsigned IPA and bind it to the request
+        run: python3 -I builder/native-build/private_build.py package
+
+      - name: Upload only IPA and receipt
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: swide-ipa-${{ inputs.request_id }}-${{ github.run_attempt }}
+          path: |
+            result/PocketApp-unsigned.ipa
+            result/build-identity.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3

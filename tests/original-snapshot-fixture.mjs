@@ -1,12 +1,13 @@
-// Offline fixture: exercise the real editor ZIP/manifest code using an isolated local Git repository.
+// Offline fixture: compile a synthetic project edited and exported by the local ZIP editor using an isolated local Git repository.
 import assert from "node:assert/strict";
+import {createHash,randomUUID} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {mkdir,readFile,writeFile} from "node:fs/promises";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {newProject} from "../web/core.mjs";
 import {openZipWorkspace,exportZipWorkspace} from "../web/zip-workspace.mjs";
-import {originalSchemes,submitOriginal} from "../web/original-run.mjs";
+import {originalSchemes} from "../web/original-run.mjs";
 
 const work = path.resolve(process.argv[2]), snapshot = path.join(work,"snapshot");
 const generator=fileURLToPath(new URL("../native-build/generate_project.py",import.meta.url));
@@ -25,40 +26,18 @@ const git=(args,input)=>execFileSync("git",["-c","user.name=Pocket fixture","-c"
   cwd:snapshot,input,encoding:"utf8"
 }).trim();
 git(["init","-q","-b","main"]);
-git(["commit","--allow-empty","-qm","Fixture base"]);
-const base=git(["rev-parse","HEAD"]);
-let payload,dispatch;
-const api={repo:"fixture/local",async request(method,route,body){
-  if(method==="GET" && route==="/actions/workflows/pocket-original-xcode.yml") return {};
-  if(method==="GET" && route==="/git/ref/heads/main") return {object:{sha:base}};
-  if(method==="GET" && route==="/git/commits/"+base) return {tree:{sha:git(["rev-parse","HEAD^{tree}"])}};
-  if(method==="POST" && route==="/git/blobs"){
-    payload=Buffer.from(body.content,"base64");
-    return {sha:git(["hash-object","-w","--stdin"],payload)};
-  }
-  if(method==="POST" && route==="/git/trees"){
-    for(const file of body.tree){
-      assert.match(file.path,/^original-xcode\/(?:sources\/[a-f\d-]+\.zip|requests\/[a-f\d-]+\.json)$/);
-      const destination=path.join(snapshot,file.path);
-      await mkdir(path.dirname(destination),{recursive:true});
-      await writeFile(destination,file.content ?? payload);
-      git(["add","--",file.path]);
-    }
-    return {sha:git(["write-tree"])};
-  }
-  if(method==="POST" && route==="/git/commits") return {sha:git(["commit-tree",body.tree,"-p",base,"-m",body.message])};
-  if(method==="PATCH" && route==="/git/refs/heads/main"){
-    assert.equal(body.force,false);
-    git(["update-ref","refs/heads/main",body.sha,base]);
-    return {object:{sha:git(["rev-parse","HEAD"])}};
-  }
-  if(method==="POST" && route==="/actions/workflows/pocket-original-xcode.yml/dispatches"){
-    dispatch=body.inputs;return {};
-  }
-  throw Error("Unexpected fixture request: "+method+" "+route);
-}};
-const {id,commit}=await submitOriginal({api,archive:exportZipWorkspace(entries),choice:choices[0],mode:"device",approved:true});
-assert.deepEqual(dispatch,{request_id:id,source_sha:commit,allow_project_code:"true"});
-assert.equal(git(["status","--porcelain"]),"");
-await writeFile(path.join(work,"inputs.json"),JSON.stringify(dispatch));
-console.log("Prepared fixture commit "+commit+" and approved request "+id);
+const requestId = randomUUID();
+const zip = new Uint8Array(await exportZipWorkspace(entries).arrayBuffer());
+const zipPath = "original-xcode/sources/" + requestId + ".zip";
+const manifest = {version:1, request_id:requestId, zip_path:zipPath,
+  sha256:createHash("sha256").update(zip).digest("hex"), ...choices[0]};
+const manifestPath = "original-xcode/requests/" + requestId + ".json";
+for (const file of [zipPath, manifestPath]) {
+  await mkdir(path.dirname(path.join(snapshot, file)), {recursive:true});
+}
+await writeFile(path.join(snapshot, zipPath), zip);
+await writeFile(path.join(snapshot, manifestPath), JSON.stringify(manifest));
+git(["add", "--", zipPath, manifestPath]);
+git(["commit", "-qm", "Synthetic original Xcode regression project"]);
+const inputs = {request_id:requestId, source_sha:git(["rev-parse", "HEAD"]), allow_project_code:"true"};
+await writeFile(path.join(work, "inputs.json"), JSON.stringify(inputs));

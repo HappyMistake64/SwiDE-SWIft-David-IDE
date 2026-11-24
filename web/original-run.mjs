@@ -1,7 +1,8 @@
 import {sameRepository} from "./core.mjs";
 
-// Submit a user-approved snapshot to the existing original Xcode project workflows.
-const BUILD_LIMIT = 20 * 1024 * 1024;
+// Original Xcode projects can contain executable build phases. Keep archives on the
+// device until the private protocol supports that separate build mode.
+const ARCHIVE_NOTICE = "Soukromé sestavení původních Xcode projektů a spuštění v simulátoru zatím nejsou k dispozici. Archiv můžeš upravit a exportovat do Souborů.";
 const SHA = /^[0-9a-f]{40}$/;
 const MODES = {
   device: {file:"pocket-original-xcode.yml", title:"Original Xcode", artifact:"original-xcode"},
@@ -10,7 +11,6 @@ const MODES = {
 const STATE_KEY = "pocket-original-last-v1";
 const UUID = /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/;
 function requireValue(value,message) { if (!value) throw new Error(message); }
-function sha(value) { requireValue(SHA.test(value || ""),"GitHub nevrátil platný SHA."); return value; }
 
 export function originalSchemes(entries) {
   const paths = new Set(entries.filter(e=>!e.dir).map(e=>e.path));
@@ -47,42 +47,9 @@ export function checkOriginalBuild(entries,choice) {
   const xml = new DOMParser().parseFromString(scheme,"application/xml");
   requireValue(xml.documentElement.nodeName === "Scheme" && !xml.querySelector("parsererror"),"Vybrané schéma nemá platný kořen Scheme.");
 }
-function toBase64(bytes) {
-  const chunks = [];
-  for (let i=0; i<bytes.length; i+=24576)
-    chunks.push(btoa(String.fromCharCode(...bytes.subarray(i,i+24576))));
-  return chunks.join("");
-}
-export async function submitOriginal({api,archive,choice,mode,approved,onRecord = ()=>{}}) {
-  requireValue(approved === true,"Je třeba výslovný souhlas s odesláním a spuštěním kódu.");
-  requireValue(Object.hasOwn(MODES,mode),"Neznámý způsob sestavení.");
-  requireValue(api && /^[\w.-]+\/[\w.-]+$/.test(api.repo),"Nejdřív připoj GitHub v nastavení.");
-  requireValue(archive.size > 0 && archive.size <= BUILD_LIMIT,"ZIP pro vzdálený build musí mít nejvýše 20 MiB.");
-  const bytes = new Uint8Array(await archive.arrayBuffer());
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256",bytes));
-  const id = crypto.randomUUID(), zipPath = "original-xcode/sources/"+id+".zip";
-  const manifest = {version:1,request_id:id,zip_path:zipPath,
-    sha256:Array.from(digest,b=>b.toString(16).padStart(2,"0")).join(""),
-    project_path:choice.project_path,scheme_path:choice.scheme_path,scheme:choice.scheme};
-  const req = (method,path,body)=>api.request(method,path,body);
-  await req("GET","/actions/workflows/"+MODES[mode].file);
-  const head = sha((await req("GET","/git/ref/heads/main")).object?.sha);
-  const baseTree = sha((await req("GET","/git/commits/"+head)).tree?.sha);
-  const blobSha = sha((await req("POST","/git/blobs",{content:toBase64(bytes),encoding:"base64"})).sha);
-  const tree = sha((await req("POST","/git/trees",{base_tree:baseTree,tree:[
-    {path:zipPath,mode:"100644",type:"blob",sha:blobSha},
-    {path:"original-xcode/requests/"+id+".json",mode:"100644",type:"blob",content:JSON.stringify(manifest)}
-  ]})).sha);
-  const commit = sha((await req("POST","/git/commits",{message:"SwiDe original "+id,tree,parents:[head]})).sha);
-  // A concurrent update causes a conflict; never force-push or dispatch an unpublished snapshot.
-  const ref = await req("PATCH","/git/refs/heads/main",{sha:commit,force:false});
-  requireValue(ref?.object?.sha === commit,"GitHub nepotvrdil uložení snapshotu do main.");
-  const record = {repo:api.repo,id,commit,mode};
-  onRecord(record);
-  await req("POST","/actions/workflows/"+MODES[mode].file+"/dispatches",{
-    ref:"main",inputs:{request_id:id,source_sha:commit,allow_project_code:"true"}
-  });
-  return record;
+// Older integrations can still call this entry point without transmitting anything.
+export async function submitOriginal() {
+  throw new Error(ARCHIVE_NOTICE);
 }
 
 export async function findOriginalResult(api,record) {
@@ -111,85 +78,31 @@ export async function findOriginalResult(api,record) {
   return {url,artifactURL,stage:run.conclusion || run.status};
 }
 
-export function mountOriginalRun(container,getWorkspace) {
-  const el = (tag,text) => {
-    const node=document.createElement(tag);
-    if (text) node.textContent=text;
-    return node;
-  };
-  const group=el("section"), title=el("h3","Sestavit původní projekt"), label=el("label","Sdílené schéma ");
-  group.id = "zip-build"; group.tabIndex = -1;
-  const choices=el("select"); label.append(choices);
-  const action=el("select"), actionLabel=el("label","Výstup ");
-  for (const [id,text] of [["device","IPA pro iPhone"],["simulator","Spustit v simulátoru a zachytit výsledek"]]) {
-    const option=el("option",text); option.value=id; action.append(option);
+export function mountOriginalRun(container) {
+  const section = document.createElement("section");
+  section.id = "zip-build";
+  section.tabIndex = -1;
+  const heading = document.createElement("h3");
+  heading.textContent = "Sestavit původní projekt";
+  const notice = document.createElement("p");
+  notice.textContent = ARCHIVE_NOTICE;
+  const schemes = document.createElement("p");
+  section.append(heading, notice, schemes);
+
+  let record;
+  try { record = JSON.parse(localStorage.getItem(STATE_KEY)); } catch {}
+  if (record && /^[\w.-]+\/[\w.-]+$/.test(record.repo) && SHA.test(record.commit) && UUID.test(record.id)) {
+    const link = document.createElement("a");
+    link.textContent = "Zobrazit historický snímek sestavení v1 na GitHubu";
+    link.href = "https://github.com/" + record.repo + "/commit/" + record.commit;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    section.append(link);
   }
-  actionLabel.append(action);
-  const run=el("button","Odeslat a spustit…"), refresh=el("button","Zjistit stav běhu");
-  run.type=refresh.type="button";
-  const state=el("p"), links=el("p"); state.setAttribute("role","status");
-  group.append(title,label,actionLabel,run,refresh,state,links); container.append(group);
-  let record, options=[], busy=false;
-  try { record=JSON.parse(localStorage.getItem(STATE_KEY)); } catch {}
-  const api=()=>globalThis.pocketIDE?.getAPI?.();
-  const enable=()=>{
-    run.disabled=busy || !options.length;
-    refresh.disabled=busy || !record;
-    action.disabled=choices.disabled=busy || !options.length;
+  container.append(section);
+  return entries => {
+    const names = originalSchemes(entries).map(choice => choice.scheme);
+    schemes.hidden = names.length === 0;
+    schemes.textContent = names.length ? "Sdílená schémata v archivu: " + names.join(", ") : "";
   };
-  const refreshChoices=entries=>{
-    options=originalSchemes(entries);
-    choices.replaceChildren(...options.map((s,i)=>{const opt=el("option",s.project_path+" · "+s.scheme);opt.value=String(i);return opt;}));
-    state.textContent=options.length ? "" : "V archivu je potřeba .xcodeproj se sdíleným schématem (.xcscheme).";
-    enable();
-  };
-  refreshChoices([]);
-  const addLink=(name,url)=>{
-    const a=el("a",name);a.href=url;a.target="_blank";a.rel="noopener noreferrer";links.append(a,document.createTextNode(" "));
-  };
-  const updateStatus=async()=>{
-    const result=await findOriginalResult(api(),record);
-    links.replaceChildren();
-    if (!result) {
-      state.textContent="Běh s přesnou identitou zatím nebyl nalezen. Po chvíli obnov stav.";
-      addLink("Běhy workflow","https://github.com/"+record.repo+"/actions/workflows/"+MODES[record.mode].file);
-      return;
-    }
-    state.textContent="Stav běhu: "+result.stage;
-    addLink("Otevřít běh",result.url);
-    if (result.artifactURL) addLink(record.mode==="device" ? "Stáhnout ZIP s IPA" : "Stáhnout záznam simulátoru",result.artifactURL);
-  };
-  refresh.onclick=async()=>{
-    busy=true;enable();
-    try {await updateStatus();} catch(e){state.textContent=e.message;} finally {busy=false;enable();}
-  };
-  run.onclick=async()=>{
-    if(busy) return;
-    busy=true;enable();
-    let committed=false;
-    try {
-      let session;
-      try { session=api(); }
-      catch (error) {
-        document.dispatchEvent(new Event("pocket:github-required"));
-        throw error;
-      }
-      requireValue(session,"Nejdřív připoj GitHub v nastavení.");
-      const {entries,pack}=getWorkspace(), choice=options[Number(choices.value)], mode=action.value;
-      checkOriginalBuild(entries,choice);
-      const archive=pack();
-      requireValue(archive.size<=BUILD_LIMIT,"ZIP pro vzdálený build musí mít nejvýše 20 MiB.");
-      const approved=window.confirm("Odeslat celý upravený ZIP do větve main repozitáře "+session.repo+" a spustit projektové skripty na macOS runneru? Ve veřejném repozitáři budou soubory veřejné. Běh může spotřebovat placené minuty.\n\n"+choice.project_path+" · "+choice.scheme+"\n"+action.selectedOptions[0].textContent);
-      if (!approved) return;
-      state.textContent="Odesílám snapshot a žádost o běh…";links.replaceChildren();
-      await submitOriginal({api:session,archive,choice,mode,approved,onRecord:value=>{
-        record=value;committed=true;
-        try { localStorage.setItem(STATE_KEY,JSON.stringify(value)); } catch {}
-      }});
-      state.textContent="Žádost o běh byla přijata. Stav ověříš tlačítkem Zjistit stav běhu.";
-    } catch(e) {
-      state.textContent=(committed ? "Snapshot je uložený. Před dalším odesláním ověř stav běhu. " : "")+e.message;
-    } finally {busy=false;enable();}
-  };
-  return refreshChoices;
 }

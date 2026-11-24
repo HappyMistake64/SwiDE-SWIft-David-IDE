@@ -1,0 +1,7 @@
+{
+  "format": "xcode-pocket-project",
+  "version": 1,
+  "files": {
+    "PocketApp.swift": "import SwiftUI\n@main struct EditorSmoke: App { var body: some Scene { WindowGroup { Text(\"SwiDe CI\") } } }\n"
+  }
+}

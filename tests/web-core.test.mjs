@@ -258,3 +258,26 @@ test("restoring many completed builds keeps every pending request and the select
   assert.equal(builds.length,31);
   assert.deepEqual(builds.at(-1),pending);
 });
+
+test("release pin matches the complete clean template and its reusable builder",async()=>{
+  const {readFile,readdir}=await import("node:fs/promises");
+  const {createHash}=await import("node:crypto");
+  const {BUILDER_SHA,TEMPLATE_BLOBS}=await import("../web/build-pins.mjs");
+  const root=new URL("../build-template/",import.meta.url);
+  const files={};
+  async function walk(dir,prefix) {
+    for (const item of await readdir(dir,{withFileTypes:true})) {
+      const path=prefix+item.name;
+      if (item.isDirectory()) await walk(new URL(item.name+"/",dir),path+"/");
+      else {
+        assert.equal(item.isFile(),true);
+        const bytes=await readFile(new URL(item.name,dir));
+        files[path]=createHash("sha1").update("blob "+bytes.length+"\0").update(bytes).digest("hex");
+      }
+    }
+  }
+  await walk(root,"");
+  assert.deepEqual(files,TEMPLATE_BLOBS);
+  const wrapper=await readFile(new URL(WORKFLOW,root),"utf8");
+  assert.match(wrapper,new RegExp("swide-private-build\\.yml@"+BUILDER_SHA+"(?:\\s|$)"));
+});

@@ -67,7 +67,7 @@ from pathlib import Path
 result = json.loads(Path(sys.argv[1]).read_text())
 print(json.dumps(result, ensure_ascii=False, indent=2))
 if (result.get("passed") is not True or result.get("engine") != "WKWebView" or result.get("editorName") != "SwiDe"
-        or result.get("origin") != "file:" or result.get("requests") != 1
+        or result.get("origin") != "file:" or result.get("requests") != 2
         or result.get("tokenPersisted") is not False):
     sys.exit("Native WKWebView regression failed.")
 PY

@@ -142,6 +142,7 @@ NSDictionary *SwiDeFolderSnapshot(NSURL *root, NSError **error) {
     configuration.websiteDataStore = WKWebsiteDataStore.defaultDataStore;
     [configuration.userContentController addScriptMessageHandler:self name:@"exportProject"];
     [configuration.userContentController addScriptMessageHandler:self name:@"exportWorkspaceZip"];
+    [configuration.userContentController addScriptMessageHandler:self name:@"exportVerifiedIPA"];
     [configuration.userContentController addScriptMessageHandlerWithReply:self contentWorld:WKContentWorld.pageWorld name:@"importFolder"];
     self.browser = [[WKWebView alloc] initWithFrame:CGRectZero configuration:configuration];
     self.browser.navigationDelegate = self;
@@ -289,7 +290,7 @@ NSDictionary *SwiDeFolderSnapshot(NSURL *root, NSError **error) {
 
 // WKWebView presents the system file picker for the editor's HTML file inputs on iOS.
 - (void)userContentController:(WKUserContentController *)controller didReceiveScriptMessage:(WKScriptMessage *)message {
-    if (!message.frameInfo.isMainFrame || ![self isEditorURL:message.frameInfo.request.URL] ||
+    if (message.webView != self.browser || !message.frameInfo.isMainFrame || ![self isEditorURL:message.frameInfo.request.URL] ||
         self.presentedViewController) return;
 
     NSData *data = nil;
@@ -303,25 +304,27 @@ NSDictionary *SwiDeFolderSnapshot(NSURL *root, NSError **error) {
             return;
         }
         filename = @"swide-project.json";
-    } else if ([message.name isEqualToString:@"exportWorkspaceZip"]) {
+    } else if ([message.name isEqualToString:@"exportWorkspaceZip"] || [message.name isEqualToString:@"exportVerifiedIPA"]) {
         if (![message.body isKindOfClass:NSDictionary.class]) return;
         NSDictionary *payload = message.body;
         filename = payload[@"name"];
         NSString *encoded = payload[@"base64"];
-        NSUInteger maxBytes = 32 * 1024 * 1024;
+        BOOL ipa = [message.name isEqualToString:@"exportVerifiedIPA"];
+        NSString *extension = ipa ? @"ipa" : @"zip";
+        NSUInteger maxBytes = (ipa ? 64 : 32) * 1024 * 1024;
         if (![filename isKindOfClass:NSString.class] || !filename.length || filename.length > 128 ||
             ![filename isEqualToString:filename.lastPathComponent] || [filename hasPrefix:@"."] ||
-            [filename containsString:@"\\"] || ![filename.pathExtension.lowercaseString isEqualToString:@"zip"] ||
+            [filename containsString:@"\\"] || ![filename.pathExtension.lowercaseString isEqualToString:extension] ||
             [filename rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound ||
             ![encoded isKindOfClass:NSString.class] || !encoded.length || encoded.length > ((maxBytes + 2) / 3) * 4) {
-            [self showError:@"Export ZIP vyžaduje platný název a archiv do velikosti 32 MiB."];
+            [self showError:ipa ? @"Export ověřené IPA vyžaduje platný soubor do 64 MiB." : @"Export ZIP vyžaduje platný název a archiv do velikosti 32 MiB."];
             return;
         }
         data = [[NSData alloc] initWithBase64EncodedString:encoded options:0];
         // The web exporter emits standard ZIP local headers (or an empty ZIP end record).
         const unsigned char *bytes = data.bytes;
         if (data.length < 22 || data.length > maxBytes || bytes[0] != 'P' || bytes[1] != 'K' ||
-            !((bytes[2] == 3 && bytes[3] == 4) || (bytes[2] == 5 && bytes[3] == 6))) {
+            !((bytes[2] == 3 && bytes[3] == 4) || (!ipa && bytes[2] == 5 && bytes[3] == 6))) {
             [self showError:@"Archiv ZIP se nepodařilo načíst."];
             return;
         }

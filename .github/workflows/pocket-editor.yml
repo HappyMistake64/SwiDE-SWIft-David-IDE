@@ -6,6 +6,15 @@ on:
       - 'web/**'
       - 'pocket-editor/**'
       - '.github/workflows/pocket-editor.yml'
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'pocket-editor/**'
+      - 'tests/**'
+      - 'native-build/**'
+      - 'build-template/**'
+      - '.github/workflows/swide-private-build.yml'
+      - '.github/workflows/pocket-editor.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,7 +38,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - run: node --test tests/web-core.test.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: SWIDE_XCODE_PROTOCOL_TEST=1 node --test tests/private-protocol-integration.test.mjs
       - run: bash pocket-editor/build.sh
       - uses: actions/upload-artifact@v4
         with:
@@ -55,5 +67,5 @@ jobs:
           cmp SwiDe.ipa Xcode-Pocket-Editor.ipa
           gh release create "pocket-editor-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" SwiDe.ipa Xcode-Pocket-Editor.ipa \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
-            --title "SwiDe 0.5.1 · build $GITHUB_RUN_NUMBER" \
-            --notes 'Jednodušší navigace, přímé otevření souboru, viditelné uložení a sestavení správného projektu. Stáhni SwiDe.ipa pro SideStore.'
+            --title "SwiDe 0.6.0 · build $GITHUB_RUN_NUMBER" \
+            --notes 'Soukromé sestavení projektu ve vlastním GitHub repozitáři a ověření stažené IPA.'

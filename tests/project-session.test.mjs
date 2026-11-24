@@ -76,7 +76,7 @@ test("a named new project opens normally and validates before replacing the old 
   session.create("MujProjekt");
   assert.equal(session.isClosed(), false);
   assert.equal(draft.settings.appName, "MujProjekt");
-  assert.equal(draft.settings.repo, "example/archive");
+  assert.equal(draft.settings.repo, "");
   assert.equal(draft.active, "ContentView.swift");
   assert.match(draft.project.files[draft.active], /struct ContentView/);
 });

@@ -2,8 +2,9 @@ name: SwiDe unsigned IPA smoke
 on:
   pull_request:
     paths:
+      - "tests/fixtures/editor-smoke.json"
       - "native-build/generate_project.py"
-      - ".github/workflows/pocket-ios.yml"
+      - ".github/workflows/swide-private-build.yml"
       - ".github/workflows/pocket-ipa-smoke.yml"
   workflow_dispatch:
 permissions:
@@ -17,7 +18,7 @@ jobs:
       - name: Generate sample native project
         run: |
           python3 native-build/generate_project.py \
-            --input pocket-builds/bca30ccb-961e-49ea-a343-5de9770125b4.json \
+            --input tests/fixtures/editor-smoke.json \
             --output build-project \
             --app-name PocketApp \
             --bundle-id cz.davidvolf.pocketapp

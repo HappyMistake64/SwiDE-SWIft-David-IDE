@@ -128,12 +128,17 @@ THE SOFTWARE.
         <div class="form-grid">
           <label>Název aplikace<input id="app-name" value="PocketApp" autocomplete="off"></label>
           <label>Bundle ID<input id="bundle-id" value="cz.davidvolf.pocketapp" autocapitalize="off" spellcheck="false"></label>
-          <label>Repozitář<input id="repo" autocomplete="off" spellcheck="false" value="HappyMistake64/SwiDE-SWIft-David-IDE"></label>
+          <label>Soukromý repozitář aplikace<input id="repo" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="tvůj-účet/moje-aplikace"></label>
           <label>GitHub token<input id="connect-token" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="github_pat_…" aria-describedby="connection-status"></label>
         </div>
         <div class="inline-actions"><button type="button" id="check-access">Ověřit a připojit</button><button type="button" id="toggle-token" aria-pressed="false">Zobrazit token</button></div>
-        <div id="connection-status" class="status connection-status" role="status" aria-live="polite" aria-atomic="true">Vlož GitHub token a klepni na Ověřit a připojit.</div>
-        <p class="small muted">Token platí pro tuto relaci. Potřebná oprávnění repozitáře jsou Contents a Actions s přístupem pro čtení a zápis.</p>
+        <button id="forget-target" type="button">Odpojit a zapomenout cíl</button>
+        <div id="connection-status" class="status connection-status" role="status" aria-live="polite" aria-atomic="true">Zadej svůj soukromý projektový repozitář a jeho token. Lokální editor funguje i bez připojení.</div>
+        <ol class="small">
+          <li>V Safari založ soukromý repozitář podle <a href="https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/blob/main/docs/PRIVATE_SETUP.md" target="_blank" rel="noopener noreferrer">návodu pro soukromé sestavování</a>. Nastav viditelnost Private.</li>
+          <li>Vytvoř <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">fine-grained token</a> s expirací. Vyber jen tento repozitář a oprávnění Contents a Actions s přístupem Read and write. Token zůstává v paměti relace. <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener noreferrer">Spravovat a odvolat token</a></li>
+          <li>Zdroj zůstává v historii soukromého repozitáře. Číst jej mohou lidé a integrace s příslušným přístupem. GitHub Free zahrnuje 12 USD měsíčně. Osm minut standardního macOS odpovídá 0,496 USD. <a href="https://github.com/settings/billing" target="_blank" rel="noopener noreferrer">Spotřeba a rozpočet</a></li>
+        </ol>
       </div></details>
       <div class="project-actions" id="snapshots" data-topic="snapshots" hidden><button type="button" id="btn-import">Import JSON</button><button type="button" id="btn-export">Export JSON</button>
         <button type="button" data-command="checkpoint">Uložit kontrolní bod</button><button type="button" data-command="restore">Obnovit kontrolní bod</button>
@@ -165,16 +170,11 @@ THE SOFTWARE.
     </section>
     <section class="panel preview" data-panel="preview" data-view-panel="preview" hidden>
       <div class="panel-heading"><h1>Náhled</h1></div>
-      <p>Sestav aktuální projekt ve SwiDe na vzdáleném Macu a zachyť první obrazovku aplikace v simulátoru iPhonu.</p>
-      <label class="field">Vzhled simulátoru<select id="preview-appearance"><option value="default">Výchozí</option><option value="light">Světlý</option><option value="dark">Tmavý</option><option value="both">Světlý i tmavý snímek</option></select></label>
-      <details class="group"><summary>Pokročilé nastavení náhledu</summary><div class="group-body">
-      <label class="field">Volitelný bod zastavení LLDB<input id="debug-at" placeholder="ContentView.swift:12" autocapitalize="off" spellcheck="false"></label>
-      <p class="small">Pro jednorázový záznam zásobníku a lokálních proměnných zadej soubor a řádek dosažitelný při spuštění. Výsledný debug.json otevři v diagnostice sestavení.</p>
-      </div></details>
-      <button id="simulate" type="button" class="primary">Spustit a pořídit snímek</button>
+      <p>V privátním režimu 0.6 lze otevřít místní snímek. Vzdálený simulátor a ladění čekají na podporu ověřených výsledků.</p>
+      <button id="simulate" type="button" disabled>Vzdálený simulátor nedostupný</button>
       <div id="preview-results" aria-live="polite"></div>
       <details class="group"><summary>Otevřít snímek ze Souborů</summary><div class="group-body">
-        <p>Stáhni výsledek běhu, rozbal ZIP v Souborách a vyber screenshot.png. Při volbě obou vzhledů najdeš v ZIPu také screenshot-dark.png.</p>
+        <p>Vyber existující snímek PNG do 20 MiB ze Souborů.</p>
         <input id="preview-file" type="file" accept="image/png">
         <figure hidden id="preview-figure"><img id="preview-image" style="max-width:100%;max-height:60vh" alt="Vybraný snímek simulátoru"><figcaption id="preview-caption"></figcaption></figure>
       </div></details>
@@ -188,9 +188,9 @@ THE SOFTWARE.
         <section id="debug-report" aria-label="Ladění LLDB"></section>
       </div></details>
       <details class="group"><summary>Instalace přes SideStore</summary><div class="group-body">
-        <ol><li>U úspěšného sestavení klepni na <strong>Stáhnout ZIP s IPA</strong>. V Safari se případně přihlas ke GitHubu.</li>
-        <li>V Souborech rozbal stažený ZIP. Uvnitř najdeš <strong>PocketApp-unsigned.ipa</strong>.</li>
-        <li>Připoj iPhone k Wi-Fi, zapni LocalDevVPN a v nastaveném SideStore otevři <strong>My Apps → +</strong>. Vyber IPA a po instalaci spusť aplikaci z plochy.</li></ol>
+        <ol><li>V historii vyber <strong>Ověřit stažení IPA</strong>. Pokud přímé stažení nefunguje, stáhni přesný ZIP na GitHubu a použij <strong>Ověřit ZIP ze Souborů</strong>.</li>
+        <li>Klepni na <strong>Uložit ověřenou IPA</strong> a ulož ji do Souborů. Jde o nepodepsanou aplikaci.</li>
+        <li>V nastaveném SideStore otevři <strong>My Apps → +</strong> a vyber IPA pro podepsání a instalaci.</li></ol>
         <a href="https://docs.sidestore.io/docs/installation/prerequisites">První nastavení SideStore</a>
       </div></details>
     </section>

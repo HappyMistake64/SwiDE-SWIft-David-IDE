@@ -11,3 +11,8 @@ Uveď verzi editoru nebo commit, zda šlo o Safari či nativní editor, očekáv
 Před přiložením snímku nebo logu odstraň tokeny, podpisové klíče, přihlašovací údaje a cizí zdrojové soubory. U již zveřejněného GitHub tokenu jej co nejdříve zneplatni v nastavení svého účtu. K popisu problému stačí druh údaje a místo, kde se objevil.
 
 Běžné selhání kompilace, importu nebo instalace můžeš nahlásit přes [veřejné Issues](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/issues/new/choose). Pokud si nejsi jistý, zda chyba odhaluje soukromá data, použij soukromý formulář.
+
+
+## Soukromé buildy 0.6
+
+Oprávnění se řídí přístupem k celému privátnímu repozitáři. Ke sdílení jediné aplikace vytvoř vlastní repozitář pro tuto aplikaci. Přihlašovací údaje, instalační certifikáty a osobní klíče do něj nevkládej. Porovnání otisků ověřuje vazbu konkrétní IPA na daný požadavek a běh. Obsah aplikace i práva přizvaných čtenářů spravuje vlastník. Historické veřejné snímky mohou být dostupné v kopiích repozitáře. [Migrace dřívějších přístupů](docs/PRIVATE_SETUP.md)

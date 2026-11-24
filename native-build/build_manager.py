@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 """Resolve SwiDe builds without ever guessing which run owns an artifact.
 
-Only read-only GitHub Actions REST API endpoints are used. The original request
-identity (UUID and full source commit SHA) must be retained by the caller.
+Private v2 requests bind a local request record to a GitHub run, artifact and IPA.
+Use --request with a saved v2 record and --artifact-zip for byte verification.
+Historical v1 lookup by UUID and SHA remains available through --repo.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
 import json
 import os
 import re
 import sys
+import stat
+import zipfile
+from pathlib import Path
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -31,6 +37,12 @@ class API(Protocol):
     def get(self, path: str) -> dict[str, Any]: ...
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Never send the bearer token to a redirected host or renamed repo.
+        return None
+
+
 class GitHubAPI:
     def __init__(self, token: str | None = None):
         self.token = token
@@ -42,12 +54,12 @@ class GitHubAPI:
             "https://api.github.com" + path,
             headers={
                 "Accept": "application/vnd.github+json",
-                "User-Agent": "xcode-pocket-build-manager/1.0",
+                "User-Agent": "swide-build-manager/0.6",
                 "X-GitHub-Api-Version": "2022-11-28",
                 **({"Authorization": "Bearer " + self.token} if self.token else {}),
             },
         )
-        with urllib.request.urlopen(req, timeout=15) as response:
+        with urllib.request.build_opener(NoRedirect()).open(req, timeout=15) as response:
             result = json.load(response)
         if not isinstance(result, dict):
             raise ValueError("Unexpected GitHub API response")
@@ -61,7 +73,7 @@ class Identity:
     source_sha: str
 
     def __post_init__(self) -> None:
-        if not REPO_PATTERN.fullmatch(self.repo):
+        if not REPO_PATTERN.fullmatch(self.repo) or any(part in (".", "..") for part in self.repo.split("/")):
             raise ValueError("repo must be in owner/name format")
         if not UUID_PATTERN.fullmatch(self.request_id) or str(uuid.UUID(self.request_id)) != self.request_id:
             raise ValueError("request_id must be a canonical lowercase UUID")
@@ -201,21 +213,158 @@ def resolve(api: API, identity: Identity, run_id: int | None = None) -> dict[str
                  message="Exact run and request verified; source SHA bound by the identity artifact.")
 
 
+PRIVATE_WORKFLOW = ".github/workflows/swide-build.yml"
+MAX_IPA = 64 * 1024 * 1024
+MAX_RESULT = MAX_IPA + 1024 * 1024
+IPA = "PocketApp-unsigned.ipa"
+RECEIPT = "build-identity.json"
+RECEIPT_KEYS = ("mode", "request_id", "project_path", "source_sha", "input_sha256", "manifest_sha256",
+                "caller_sha", "builder_sha", "workflow_id", "workflow_path", "repository_id", "owner_id",
+                "run_id", "run_attempt")
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ValueError(message)
+
+
+def valid_id(value: Any) -> bool:
+    return type(value) is int and 0 < value <= 2 ** 53 - 1
+
+
+def validate_request(req: dict) -> None:
+    require(req.get("schema") == "swide-build-request/v2" and req.get("mode") == "generated",
+            "Expected a private generated build request")
+    identity = Identity(req["repo"], req["request_id"], req["source_sha"])
+    require(req.get("project_path") == f"pocket-builds/{identity.request_id}.json" and
+            req.get("workflow_path") == PRIVATE_WORKFLOW and
+            isinstance(req.get("caller_branch"), str) and req["caller_branch"], "Invalid request path or branch")
+    require(req.get("actor_id") == req.get("owner_id"), "Only owner-dispatched builds are supported")
+    for key in ("caller_sha", "builder_sha"):
+        require(bool(SHA_PATTERN.fullmatch(req.get(key, ""))), f"Invalid {key}")
+    for key in ("manifest_sha256", "input_sha256"):
+        require(bool(re.fullmatch(r"[a-f0-9]{64}", req.get(key, ""))), f"Invalid {key}")
+    for key in ("workflow_id", "owner_id", "repository_id", "actor_id", "run_id", "run_attempt"):
+        require(valid_id(req.get(key)), f"Missing or invalid {key}")
+
+
+def verify_repository(repo: dict, req: dict) -> None:
+    require(repo.get("private") is True and repo.get("id") == req["repository_id"] and
+            (repo.get("owner") or {}).get("id") == req["owner_id"] and
+            repo.get("full_name", "").lower() == req["repo"].lower(), "Private repository identity mismatch")
+
+
+def verify_run(req: dict, run: dict) -> None:
+    for key in ("repository", "head_repository"):
+        verify_repository(run.get(key) or {}, req)
+    title = f"SwiDe {req['request_id']} {req['source_sha']} {req['manifest_sha256']}"
+    trigger = run.get("triggering_actor")
+    require((req["run_attempt"] == 1 and trigger is None) or (trigger or {}).get("id") == req["actor_id"],
+            "Unexpected triggering actor for this run attempt")
+    require(run.get("id") == req["run_id"] and run.get("run_attempt") == req["run_attempt"] and
+            run.get("event") == "workflow_dispatch" and run.get("workflow_id") == req["workflow_id"] and
+            run.get("path", "").split("@")[0] == PRIVATE_WORKFLOW and run.get("head_sha") == req["caller_sha"] and
+            run.get("head_branch") == req["caller_branch"] and (run.get("actor") or {}).get("id") == req["actor_id"] and
+            run.get("display_title") == title, "Workflow run identity mismatch")
+
+
+def select_result(req: dict, run: dict, candidates: list) -> dict:
+    verify_run(req, run)
+    require(run.get("status") == "completed" and run.get("conclusion") == "success", "Build did not succeed")
+    name = f"swide-ipa-{req['request_id']}-{req['run_attempt']}"
+    matches = [a for a in candidates if a.get("name") == name]
+    require(len(matches) == 1, "Missing or ambiguous build artifact")
+    art = matches[0]
+    parent = art.get("workflow_run") or {}
+    require(valid_id(art.get("id")) and art.get("expired") is False and
+            bool(re.fullmatch(r"sha256:[0-9a-f]{64}", art.get("digest", ""))) and
+            valid_id(art.get("size_in_bytes")) and art["size_in_bytes"] <= MAX_RESULT and
+            parent.get("id") == req["run_id"] and parent.get("repository_id") == req["repository_id"] and
+            parent.get("head_repository_id") == req["repository_id"] and parent.get("head_sha") == req["caller_sha"] and
+            parent.get("head_branch") == req["caller_branch"] and
+            req.get("artifact_id") in (None, art["id"]) and req.get("artifact_digest") in (None, art["digest"]),
+            "Artifact metadata mismatch")
+    return art
+
+
+def check_private_zip(req: dict, artifact: dict, archive: Path) -> dict:
+    require(archive.is_file() and archive.stat().st_size == artifact["size_in_bytes"], "Artifact size mismatch")
+    with archive.open("rb") as source:
+        data = source.read(MAX_RESULT + 1)
+    require(len(data) == artifact["size_in_bytes"] and
+            "sha256:" + hashlib.sha256(data).hexdigest() == artifact["digest"], "Artifact ZIP digest mismatch")
+    with zipfile.ZipFile(io.BytesIO(data)) as result:
+        members = result.infolist()
+        require(len(members) == 2 and {m.orig_filename for m in members} == {IPA, RECEIPT},
+                "Unexpected ZIP members")
+        for member in members:
+            file_type = stat.S_IFMT(member.external_attr >> 16)
+            limit = MAX_IPA if member.filename == IPA else 16 * 1024
+            require(file_type in (0, stat.S_IFREG) and not member.is_dir() and member.flag_bits & ~0x80e == 0 and
+                    member.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED) and
+                    0 < member.file_size <= limit, "Unsafe ZIP member")
+        receipt = json.loads(result.read(RECEIPT).decode("utf-8"))
+        require(isinstance(receipt, dict) and receipt.get("schema") == "swide-build-identity/v2" and
+                receipt.get("signed") is False and all(type(receipt.get(k)) is type(req[k]) and receipt[k] == req[k]
+                for k in RECEIPT_KEYS), "Build receipt mismatch")
+        digest = hashlib.sha256()
+        with result.open(IPA) as ipa:
+            for block in iter(lambda: ipa.read(128 * 1024), b""):
+                digest.update(block)
+        require(digest.hexdigest() == receipt.get("ipa_sha256"), "Inner IPA digest mismatch")
+        return receipt
+
+
+def resolve_private(api: API, req: dict, archive: Path | None = None) -> dict:
+    validate_request(req)
+    prefix = f"/repos/{req['repo']}"
+    verify_repository(api.get(prefix), req)
+    run = api.get(f"{prefix}/actions/runs/{req['run_id']}")
+    verify_run(req, run)
+    output = {"request_id": req["request_id"], "run_id": run["id"], "run_attempt": run["run_attempt"],
+              "source_verified": False}
+    if run.get("status") != "completed":
+        status = run.get("status")
+        return dict(output, state=status if status in ("queued", "pending", "requested", "waiting", "in_progress") else "unknown")
+    if run.get("conclusion") != "success":
+        return dict(output, state="failed", conclusion=run.get("conclusion"))
+    name = f"swide-ipa-{req['request_id']}-{req['run_attempt']}"
+    response = api.get(f"{prefix}/actions/runs/{run['id']}/artifacts?name={name}&per_page=100")
+    require(response.get("total_count") == 1, "Missing or ambiguous build artifact")
+    artifact = select_result(req, run, response["artifacts"])
+    output.update(artifact_id=artifact["id"], artifact_digest=artifact["digest"])
+    if archive is None:
+        return dict(output, state="awaiting_verification")
+    receipt = check_private_zip(req, artifact, archive)
+    return dict(output, state="success", source_verified=True, ipa_sha256=receipt["ipa_sha256"])
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", required=True, help="owner/repo")
-    parser.add_argument("--request-id", required=True)
-    parser.add_argument("--source-sha", required=True, help="full 40-character SHA")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--repo", help="owner/repo for historical v1 lookups")
+    group.add_argument("--request", type=Path, help="local v2 private request record")
+    parser.add_argument("--artifact-zip", type=Path, help="downloaded GitHub result ZIP for --request")
+    parser.add_argument("--request-id")
+    parser.add_argument("--source-sha", help="full 40-character SHA")
     parser.add_argument("--run-id", type=int, help="strongest binding; use when known")
     args = parser.parse_args(argv)
     try:
-        identity = Identity(args.repo, args.request_id, args.source_sha)
-        response = resolve(GitHubAPI(os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")), identity, args.run_id)
-    except (ValueError, urllib.error.URLError, TimeoutError) as error:
+        api = GitHubAPI(os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN"))
+        if args.request:
+            if any((args.run_id, args.request_id, args.source_sha)):
+                parser.error("--request already supplies all run and identity fields")
+            response = resolve_private(api, json.loads(args.request.read_text(encoding="utf-8")), args.artifact_zip)
+        else:
+            if args.artifact_zip or not args.request_id or not args.source_sha:
+                parser.error("historical v1 lookup requires --repo, --request-id and --source-sha")
+            identity = Identity(args.repo, args.request_id, args.source_sha)
+            response = resolve(api, identity, args.run_id)
+    except (ValueError, TypeError, KeyError, OSError, zipfile.BadZipFile, RuntimeError) as error:
         print(json.dumps({"state": "error", "message": str(error)}), file=sys.stderr)
         return 2
     print(json.dumps(response, indent=2, ensure_ascii=False))
-    return 0 if response["state"] in ("success", "queued", "in_progress", "requested", "pending", "waiting") else 1
+    return 0 if response["state"] in ("success", "awaiting_verification", "queued", "in_progress", "requested", "pending", "waiting") else 1
 
 
 if __name__ == "__main__":

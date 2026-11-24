@@ -4,9 +4,11 @@ Created by David Volf.
 
 Mobilní vývojové prostředí pro tvorbu Swift/SwiftUI aplikací z iPhonu s kompilací přes GitHub Actions na vzdáleném Macu.
 
-## Mobilní IDE 0.5.1
+## Mobilní IDE 0.6
 
-[Stáhnout aktuální editor](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/releases/latest/download/SwiDe.ipa) · [Rozsah funkcí a rozdíly oproti Xcode](docs/XCODE-PARITA.md)
+Větev 0.6 posílá standardní projekt Swift do vyhrazeného soukromého repozitáře vlastníka. Zdroj, běh a výsledek zůstávají v tomto repozitáři. Před uložením nepodepsané IPA se ověřují skutečné bajty archivu a původ sestavení. Pro telefon stačí Safari nebo aktuální nativní editor a účet GitHub.
+
+[Soukromé sestavování z iPhonu](docs/PRIVATE_SETUP.md) · [Identita požadavku a výsledku](docs/RELIABLE_BUILDS.md) · [Vydání editoru](https://github.com/HappyMistake64/SwiDE-SWIft-David-IDE/releases)
 
 V navigátoru **Soubory** přidáš tlačítkem **+** jednotlivé soubory z aplikace Soubory na iPhonu. U zdrojového kódu vyber UTF-8 soubor s příponou `.swift`. Můžeš vybrat více souborů najednou. Ve výchozím nastavení se Swift přidá do kořene projektu ve SwiDe a podporované obrázky a datové soubory do `Resources/`. Pokud už některá cesta v projektu existuje, celý výběr se zastaví před zápisem. Projekt ve SwiDe pojme až 200 souborů v celkovém limitu 4 MB včetně zakódovaných prostředků. Pro původní projekt se zachováním uspořádání složek použij import ZIP.
 
@@ -14,14 +16,14 @@ V navigátoru **Soubory** přidáš tlačítkem **+** jednotlivé soubory z apli
 
 - Klepni nahoře na **název projektu** a otevři ZIP, složku nebo projekt JSON. Ve stejné nabídce můžeš začít nový projekt SwiDe nebo se vrátit k rozpracovanému.
 - V **Souborech** otevře klepnutí na textový soubor rovnou editor. Přes **Přidat soubory** můžeš připojit další zdrojové soubory nebo otevřít ZIP.
-- Nahoře klepni na **Uložit** nebo **Sestavit**. U otevřeného ZIPu vede sestavení k volbě schématu a výstupu tohoto projektu. Ostatní nástroje jsou pod **Více**.
+- Nahoře klepni na **Uložit** nebo **Sestavit**. Původní ZIP lze lokálně otevřít a exportovat. Ostatní nástroje jsou pod **Více**.
 - Přes **název projektu → Uložit a zavřít aktuální projekt** uložíš práci a zavřeš otevřený projekt. Pro přenosnou kopii použij **Exportovat ZIP** nebo **Export JSON**.
 
 Editor drží jeden poslední projekt SwiDe a jeden poslední projekt ze ZIPu nebo složky. ZIP může mít nejvýše 20 MiB, 2 000 položek a 50 MiB po rozbalení. Při přímém importu složky platí 20 MiB včetně režie archivu.
 
 V paletě příkazů zvol **Rychle otevřít** a napiš například `ContentView.swift:12`. Nástroje editoru umí přesouvat řádky, měnit velikost písmen a vybírat párové závorky.
 
-V panelu Soubory můžeš sestavit podporované původní ZIP projekty se sdíleným schématem, porovnat změny, procházet historii větví, spravovat obrázky a upravovat lokalizace včetně existujících plurálů. Editor nabízí vzdálené dotazy SourceKit, konzole načítá výsledky XCTest, pokrytí kódu po souborech a diagnostiku. Pro ladění při startu podporuje simulátor jednorázový záznam LLDB s otevřením příslušného řádku. Náhled umožňuje pořídit světlou i tmavou variantu obrazovky. Vzdálené operace vyžadují připojení a schválení odeslání zdrojů.
+Vzdálené sestavení v 0.6 přijímá podporovaný projekt generátoru. Původní Xcode ZIP, SourceKit, vzdálené testy, ladění a simulátor vyžadují vlastní ověřený protokol. Dokud jej příslušný režim nemá, editor zdroj neodešle. Místní práce se soubory a import výsledků zůstávají dostupné.
 
 ## Historie verze 0.2.0
 
@@ -70,21 +72,7 @@ Architektura
 
 Kompilace probíhá v cloudu, ne přímo na procesoru iPhonu. Vyžaduje připojení a dostupný macOS runner.
 
-Použití aktuálního workflow
-
-V editoru nastavte repozitář HappyMistake64/SwiDE-SWIft-David-IDE, větev main, název aplikace a Bundle ID. Ověřte připojení, dostupnost workflow a odešlete Swift projekt ke kompilaci. Výsledek ověřujte také na kartě Actions.
-
-Při ručním spuštění workflow musí snímek projektu již existovat v zadaném commitu:
-
-|Vstup         |Hodnota                                        |
-|--------------|-----------------------------------------------|
-|`source_sha`  |Úplné 40znakové SHA commitu obsahujícího snímek|
-|`request_id`  |UUID tohoto požadavku                          |
-|`project_path`|Přesně `pocket-builds/<request_id>.json`       |
-|`app_name`    |Zobrazovaný název aplikace                     |
-|`bundle_id`   |Například `cz.davidvolf.pocketapp`             |
-
-Nepodepsané .app.zip nelze instalovat do iPhonu pouhým otevřením. Workflow nyní sestaví správnou strukturu unsigned IPA, ale ani ta bez podpisu a provisioningu neprojde instalací.
+Výše uvedené záznamy popisují historický veřejný prototyp. Návod pro nový projekt je v [soukromém sestavování](docs/PRIVATE_SETUP.md).
 
 Formát projektu a limity
 

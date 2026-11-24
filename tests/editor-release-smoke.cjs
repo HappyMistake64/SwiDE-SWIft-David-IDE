@@ -20,6 +20,77 @@ async function chooseDeviceFile(page, name, contents) {
   await chooser.setFiles({name, mimeType:"text/plain", buffer:Buffer.from(contents)});
 }
 
+async function assertPrivateResultUI(browser, htmlURL) {
+  const {fixture} = await import("./private-github-fixture.mjs");
+  const {BUILDER_SHA} = await import("../web/build-pins.mjs");
+  const {newProject} = await import("../web/core.mjs");
+  const {exportZipWorkspace} = await import("../web/zip-workspace.mjs");
+  const {createHash} = require("node:crypto");
+  const {readFile} = require("node:fs/promises");
+  const hash = bytes => createHash("sha256").update(bytes).digest("hex");
+  const gh = fixture();
+  const sample = require("./fixtures/private-result.json");
+  const request = {...sample.request, repo:gh.repo, repository_id:gh.metadata.id,
+    owner_id:gh.user.id, actor_id:gh.user.id, workflow_id:gh.state.workflow.id,
+    caller_sha:gh.caller, builder_sha:BUILDER_SHA, appName:"Fixture",
+    bundleId:"cz.example.fixture", stage:"dispatched"};
+  const run = {...sample.run, head_sha:gh.caller, repository:gh.metadata, head_repository:gh.metadata,
+    workflow_id:request.workflow_id, actor:gh.user, triggering_actor:gh.user};
+  const ipa = "synthetic-ipa";
+  const receipt = {...sample.receipt, builder_sha:BUILDER_SHA, caller_sha:gh.caller,
+    repository_id:gh.metadata.id, owner_id:gh.user.id, workflow_id:request.workflow_id, ipa_sha256:hash(ipa)};
+  const zip = Buffer.from(await exportZipWorkspace([{path:"build-identity.json",edit:JSON.stringify(receipt)},
+    {path:"PocketApp-unsigned.ipa",edit:ipa}]).arrayBuffer());
+  const artifact = {...sample.artifact,size_in_bytes:zip.length,digest:"sha256:"+hash(zip),
+    workflow_run:{...sample.artifact.workflow_run,head_sha:gh.caller,repository_id:gh.metadata.id,head_repository_id:gh.metadata.id}};
+  gh.state.runs.push(run);
+  gh.state.artifacts.push(artifact);
+
+  const page = await browser.newPage({viewport:{width:393,height:852},isMobile:true,hasTouch:true});
+  const token = "local-test-credential";
+  await page.exposeFunction("privateFixture", async (url, options) => {
+    assert.equal(options.headers.Authorization,"Bearer " + token);
+    if (url.endsWith("/actions/artifacts/" + artifact.id + "/zip")) {
+      return {bytes:Array.from(zip), status:200};
+    }
+    assert.equal(options.method,"GET","A restored build made a write request");
+    const reply = await gh.fetcher(url, options);
+    return {text:await reply.text(), status:reply.status};
+  });
+  await page.addInitScript(({request,project}) => {
+    localStorage.setItem("xcode-pocket-standalone-v1", JSON.stringify({
+      active:"ContentView.swift",project,settings:{repo:request.repo,appName:request.appName,bundleId:request.bundleId},
+      builds:[request]}));
+    window.fetch = async (url, options) => {
+      const reply = await window.privateFixture(String(url), options);
+      return new Response(reply.bytes ? new Uint8Array(reply.bytes) : reply.text, {status:reply.status});
+    };
+  }, {request,project:newProject()});
+  try {
+    await page.goto(htmlURL);
+    await page.locator("#btn-build").click();
+    await page.locator("#connect-token").fill(token);
+    await page.locator("#check-access").click();
+    await page.locator('[data-view="console"]:visible').first().click();
+    const verify = page.getByRole("button",{name:"Ověřit stažení IPA"});
+    const save = page.getByRole("button",{name:"Uložit ověřenou IPA"});
+    await verify.waitFor();
+    await verify.click();
+    await save.waitFor();
+    const [download] = await Promise.all([page.waitForEvent("download"), save.click()]);
+    assert.equal(download.suggestedFilename(),"PocketApp-unsigned.ipa");
+    assert.equal(await readFile(await download.path(),"utf8"),ipa);
+    const tampered = Buffer.from(zip);
+    tampered[0] ^= 1;
+    await page.locator("#builds input[type=file]").setInputFiles({name:"result.zip",mimeType:"application/zip",buffer:tampered});
+    await page.locator("#status").filter({hasText:"SHA-256 ZIPu"}).waitFor();
+    assert.equal(await save.count(),0);
+    await page.locator("#builds input[type=file]").setInputFiles({name:"result.zip",mimeType:"application/zip",buffer:zip});
+    await save.waitFor();
+    assert.equal(await page.evaluate(credential => Object.values(localStorage).some(value=>value.includes(credential)),token),false);
+  } finally { await page.close(); }
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -89,6 +160,7 @@ async function chooseDeviceFile(page, name, contents) {
     await page.getByRole("button",{name:"Více",exact:true}).click();
     await page.getByRole("button",{name:"Náhled v simulátoru",exact:true}).click();
     assert(await page.locator('[data-panel="preview"]').isVisible());
+    assert(await page.locator("#simulate").isDisabled());
     await assertNoPageOverflow(page);
     const {exportZipWorkspace} = await import("../web/zip-workspace.mjs");
     const saveSource = "let reopened = 4817\n";
@@ -143,8 +215,9 @@ async function chooseDeviceFile(page, name, contents) {
     assert.equal(await upgrade.evaluate(() => window.pocketIDE.getActive()), oldProject.active);
     assert.deepEqual(await upgrade.evaluate(() => window.pocketIDE.getProject()), oldProject.project);
     assert.equal(await upgrade.locator("#ide-title").textContent(), oldProject.settings.appName);
-    assert.equal(await upgrade.locator("#repo").inputValue(), "HappyMistake64/SwiDE-SWIft-David-IDE");
+    assert.equal(await upgrade.locator("#repo").inputValue(), "");
     await upgrade.close();
+    await assertPrivateResultUI(browser, pathToFileURL(process.argv[2]).href);
     assert.deepEqual(errors, []);
     console.log("Project navigator, persistent editing, local import, collision handling, quick open and narrow navigation passed.");
   } finally {

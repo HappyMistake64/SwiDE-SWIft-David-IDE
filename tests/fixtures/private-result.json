@@ -1,0 +1,83 @@
+{
+  "request": {
+    "schema": "swide-build-request/v2",
+    "mode": "generated",
+    "repo": "owner/private-builder",
+    "repository_id": 101,
+    "owner_id": 202,
+    "actor_id": 202,
+    "workflow_id": 303,
+    "run_id": 404,
+    "run_attempt": 1,
+    "request_id": "981e637e-5788-441d-a394-b64928bc5745",
+    "project_path": "pocket-builds/981e637e-5788-441d-a394-b64928bc5745.json",
+    "workflow_path": ".github/workflows/swide-build.yml",
+    "caller_branch": "main",
+    "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "caller_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "builder_sha": "cccccccccccccccccccccccccccccccccccccccc",
+    "input_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "manifest_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "run": {
+    "id": 404,
+    "workflow_id": 303,
+    "event": "workflow_dispatch",
+    "path": ".github/workflows/swide-build.yml",
+    "display_title": "SwiDe 981e637e-5788-441d-a394-b64928bc5745 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "actor": {
+      "id": 202
+    },
+    "run_attempt": 1,
+    "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "head_branch": "main",
+    "repository": {
+      "id": 101,
+      "owner": {
+        "id": 202
+      },
+      "private": true,
+      "full_name": "owner/private-builder"
+    },
+    "head_repository": {
+      "id": 101,
+      "owner": {
+        "id": 202
+      },
+      "private": true,
+      "full_name": "owner/private-builder"
+    },
+    "status": "completed",
+    "conclusion": "success"
+  },
+  "artifact": {
+    "id": 505,
+    "name": "swide-ipa-981e637e-5788-441d-a394-b64928bc5745-1",
+    "expired": false,
+    "workflow_run": {
+      "id": 404,
+      "repository_id": 101,
+      "head_repository_id": 101,
+      "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "head_branch": "main"
+    }
+  },
+  "receipt": {
+    "schema": "swide-build-identity/v2",
+    "mode": "generated",
+    "repository_id": 101,
+    "owner_id": 202,
+    "workflow_id": 303,
+    "run_id": 404,
+    "run_attempt": 1,
+    "request_id": "981e637e-5788-441d-a394-b64928bc5745",
+    "project_path": "pocket-builds/981e637e-5788-441d-a394-b64928bc5745.json",
+    "workflow_path": ".github/workflows/swide-build.yml",
+    "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "caller_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "builder_sha": "cccccccccccccccccccccccccccccccccccccccc",
+    "input_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "manifest_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "signed": false
+  }
+}

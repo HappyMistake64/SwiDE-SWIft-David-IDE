@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Exercise frontend ZIP snapshot and workflow identity
+      - name: Verify local-only ZIP editing and prepare a synthetic snapshot
         run: |
           node --test tests/original-run.test.mjs
           node tests/original-snapshot-fixture.mjs "$RUNNER_TEMP/original-check"

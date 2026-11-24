@@ -1,8 +1,14 @@
-# SwiDe — reliable build identity (v1)
+# SwiDe · Ověření sestavení v2
 
-This contract addresses the "wrong GitHub Actions run was selected" error. It covers only the **SwiDe iOS build** workflow; other workflows have separate artifacts and must not be treated as equivalent.
+Verze 0.6 uchovává v telefonu UUID, identitu soukromého repozitáře a vlastníka, identitu schváleného workflow a builderu, SHA commitu dat i SHA-256 snímku a manifestu voleb. Po potvrzení privátní reference následuje explicitní dispatch. Editor uloží přidělené ID běhu. Po nejistém výsledku dispatch neposílá podruhé naslepo.
 
-## Contract
+Před exportem klient sváže událost a workflow, řídicí commit, číslo běhu a pokusu s jediným konkrétním artefaktem v soukromém repozitáři. Porovná SHA-256 archivu z autentizovaných metadat s přijatými bajty, ověří vložený manifest a samostatně porovná SHA-256 uživatelské IPA. Stejným ověřením prochází ručně vybraný ZIP. Kód GitHub Actions pochází z připnuté revize a sestavení používá oddělený checkout dat. Záznamy v1 slouží jako historická informace.
+
+[Návod pro iPhone](PRIVATE_SETUP.md)
+
+## Historický protokol v1
+
+### Contract
 
 Every build request has one canonical lowercase UUID (**request_id**), its immutable **source_sha** (full lowercase 40-character Git commit), **project_path = pocket-builds/<request_id>.json**, and optionally a GitHub Actions **run_id**. Store these fields in the editor before dispatch and retain them across a page reload. Do not use "latest successful run" as a fallback.
 

@@ -1,0 +1,28 @@
+name: SwiDe private build
+run-name: SwiDe ${{ inputs.request_id }} ${{ inputs.source_sha }} ${{ inputs.manifest_sha256 }}
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        required: true
+        type: string
+        description: Private build UUID
+      source_sha:
+        required: true
+        type: string
+        description: Exact private data commit SHA
+      manifest_sha256:
+        required: true
+        type: string
+        description: SHA-256 of the request manifest
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: HappyMistake64/SwiDE-SWIft-David-IDE/.github/workflows/swide-private-build.yml@6925fd2639accfcd328f683c746d13c01863b015
+    with:
+      request_id: ${{ inputs.request_id }}
+      source_sha: ${{ inputs.source_sha }}
+      manifest_sha256: ${{ inputs.manifest_sha256 }}

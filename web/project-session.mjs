@@ -52,14 +52,14 @@ export function createProjectSession(api, storage) {
       if (!appName) throw Error("Zadej název projektu.");
       validateSettings({appName});
       const project = newProject();
-      open(project, activeFile(project, "ContentView.swift"), {appName});
+      open(project, activeFile(project, "ContentView.swift"), {appName, repo:""});
     },
     importJSON(text) {
       let input;
       try { input = JSON.parse(text); }
       catch { throw Error("Vybraný soubor neobsahuje platný JSON."); }
       const project = validateProject(input);
-      open(project, activeFile(project, input.active));
+      open(project, activeFile(project, input.active), {repo:""});
     }
   };
 }

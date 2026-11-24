@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "tests/fixtures/editor-smoke.json"
       - '.github/workflows/pocket-preview-check.yml'
       - 'native-build/simulator_preview.sh'
       - 'native-build/debug_probe.py'
@@ -23,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - run: python3 native-build/generate_project.py --input "pocket-builds/$REQUEST_ID.json" --output build-project --app-name PocketPreviewCheck --bundle-id "$BUNDLE_ID"
+      - run: python3 native-build/generate_project.py --input tests/fixtures/editor-smoke.json --output build-project --app-name PocketPreviewCheck --bundle-id "$BUNDLE_ID"
       - run: cp tests/fixtures/simulator-debug.swift build-project/Sources/PocketApp.swift
       - run: bash native-build/simulator_preview.sh
       - name: Check debugger reached the fixture during the second launch

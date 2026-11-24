@@ -4,7 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/pocket-coverage-check.yml'
-      - '.github/workflows/pocket-ios.yml'
+      - '.github/workflows/swide-private-build.yml'
       - 'native-build/generate_project.py'
       - 'native-build/collect_issues.py'
       - 'tests/coverage-check.py'

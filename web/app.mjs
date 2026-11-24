@@ -5,6 +5,7 @@ import {
 
 import {selectBuildArtifact, verifyBuildResult} from "./build-result.mjs";
 import {uploadDrafts, sendPreparedBuild} from "./build-session.mjs";
+import {trustedGitHubURL} from "./github-link.mjs";
 
 const byId = id => document.getElementById(id);
 const local = restoreState(localStorage.getItem(STORAGE_KEY));
@@ -75,7 +76,7 @@ function button(label, run) {
 }
 function external(label, url) {
   const link = htmlEl("a", "small external", label);
-  link.href = url;
+  link.href = trustedGitHubURL(url);
   link.target = "_blank";
   link.rel = "noopener noreferrer";
   return link;
